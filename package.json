@@ -1,0 +1,14 @@
+{
+  "name": "xiaoa-fe",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "scripts": {
+    "dev:mp": "pnpm --filter @xiaoa/mp dev:weapp",
+    "dev:mp:h5": "pnpm --filter @xiaoa/mp dev:h5",
+    "build:mp": "pnpm --filter @xiaoa/mp build:weapp",
+    "dev:admin": "pnpm --filter @xiaoa/admin dev",
+    "build:admin": "pnpm --filter @xiaoa/admin build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

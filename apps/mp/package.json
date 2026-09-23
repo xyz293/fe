@@ -1,0 +1,33 @@
+{
+  "name": "@xiaoa/mp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:weapp": "taro build --type weapp --watch",
+    "build:weapp": "taro build --type weapp",
+    "dev:h5": "taro build --type h5 --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xiaoa/share": "workspace:*",
+    "@tarojs/components": "3.6.35",
+    "@tarojs/runtime": "3.6.35",
+    "@tarojs/react": "3.6.35",
+    "@tarojs/taro": "3.6.35",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "zustand": "4.5.5"
+  },
+  "devDependencies": {
+    "@tarojs/cli": "3.6.35",
+    "@tarojs/plugin-framework-react": "3.6.35",
+    "@tarojs/plugin-platform-weapp": "3.6.35",
+    "@tarojs/webpack5-runner": "3.6.35",
+    "babel-preset-taro": "3.6.35",
+    "webpack": "5.78.0",
+    "@types/react": "18.2.79",
+    "@types/react-dom": "18.2.25",
+    "@types/node": "22.10.1",
+    "typescript": "5.4.5"
+  }
+}
