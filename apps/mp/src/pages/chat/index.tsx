@@ -1,60 +1,44 @@
-import { Button, Input, Text, View } from '@tarojs/components';
+import { Button, Input, ScrollView, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useState } from 'react';
-import { VersionCards } from '../../components/VersionCardsAdapter';
-import { sharedApi } from '../../utils/sharedAdapter';
-import { track } from '../../services/track';
 
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-}
+const versions = [
+  { tag: '轻奢风', content: '一枚戒指，藏着两个人对未来的想象。新款钻戒抵达门店，欢迎来挑选属于你们的那一束光。' },
+  { tag: '婚庆风', content: '好事成双，爱也成双。为心爱的TA挑一枚闪耀对戒，让每一次牵手，都有幸福作证。' },
+  { tag: '国风', content: '执子之手，以玉为盟。温润如玉的东方设计，把相守一生的承诺，戴在彼此身边。' },
+];
 
 export default function ChatPage() {
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [versions, setVersions] = useState<string[]>([]);
+  const [selected, setSelected] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
-  const sendMessage = async () => {
+  const sendMessage = () => {
     if (!input.trim() || loading) return;
-    const content = input.trim();
-    setInput('');
-    setMessages((current) => [...current, { id: `${Date.now()}-user`, role: 'user', content }]);
     setLoading(true);
-    try {
-      const result = await sharedApi.chat(content);
-      setVersions(result.versions);
-      setMessages((current) => [...current, { id: `${Date.now()}-assistant`, role: 'assistant', content: '已生成 3 个版本，请选择一个定稿。' }]);
-      track('generate_complete', { mode: 'chat', count: result.versions.length });
-    } catch {
-      setMessages((current) => [...current, { id: `${Date.now()}-error`, role: 'assistant', content: '接口暂未接入，已保留创作流程。' }]);
-    } finally {
-      setLoading(false);
-    }
+    setTimeout(() => { setLoading(false); setSent(true); setInput(''); }, 900);
   };
 
-  const recordVoice = () => {
-    const recorder = Taro.getRecorderManager();
-    recorder.start({ duration: 60_000, sampleRate: 16_000, numberOfChannels: 1 });
-    Taro.showToast({ title: '开始录音，再点一次结束', icon: 'none' });
-    recorder.onStop(() => Taro.showToast({ title: '语音已上传识别', icon: 'none' }));
-  };
+  const refine = () => { setInput('再喜庆一点，更适合婚礼季'); Taro.showToast({ title: '已把微调方向填入输入框', icon: 'none' }); };
+  const finish = () => { Taro.showToast({ title: '已存入我的作品', icon: 'success' }); };
 
   return (
     <View className="page">
-      <View className="card">
-        <Text style={{ display: 'block', fontSize: '40px', fontWeight: '600', marginBottom: '24px' }}>对话创作</Text>
-        {messages.length === 0 && <Text style={{ color: '#8c8c8c', fontSize: '28px' }}>告诉我今天想推广什么，我会一次给你 3 个版本。</Text>}
-        {messages.map((message) => <View key={message.id} style={{ padding: '20px 0', borderBottom: '1px solid #f0f0f0' }}><Text style={{ display: 'block', color: message.role === 'user' ? '#1677ff' : '#1f1f1f', whiteSpace: 'pre-wrap' }}>{message.content}</Text></View>)}
-        {versions.length > 0 && <VersionCards versions={versions} onSelect={(index: number) => track('select_version', { index })} />}
+      <View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">新对话</Text><Text className="chat-scene">写文案 ▾</Text></View>
+      <View className="card" style={{ padding: '22px' }}>
+        <View className="chat-flow">
+          <View className="bubble bubble-ai">想发什么场景的朋友圈？<Text className="muted" style={{ display: 'block', marginTop: '8px', fontSize: '22px' }}>可以告诉我商品、节日和想表达的感觉</Text></View>
+          <View className="bubble bubble-user">新款黄金对戒到货了，想写得浪漫一点</View>
+          {loading && <View className="bubble bubble-ai typing">AI 正在为你组织这份心意 ···</View>}
+          {!loading && <View className="bubble bubble-ai">好的，给你 3 个版本，选择最像你们故事的表达👇</View>}
+          {sent && <View className="bubble bubble-user">再喜庆一点，更适合婚礼季</View>}
+          <ScrollView className="version-scroll" scrollX>{versions.map((version, index) => <View className={selected === index ? 'version-card selected' : 'version-card'} key={version.tag} onClick={() => setSelected(index)}><Text className="version-tag">版本 {index + 1} · {version.tag}</Text><Text className="version-content">{version.content}</Text><View className="version-actions"><Text className="mini-action">{selected === index ? '✓ 已选定' : '选择此版'}</Text><Text className="mini-action" onClick={refine}>微调</Text><Text className="mini-action" onClick={finish}>定稿</Text></View></View>)}</ScrollView>
+        </View>
+        <Text className="section-label">继续告诉我你的想法</Text>
+        <View className="chat-input-row"><Text className="voice-button" style={{ padding: '17px', fontSize: '24px' }} onClick={() => Taro.showToast({ title: '松开后将自动识别语音', icon: 'none' })}>🎤</Text><Input className="chat-input" value={input} placeholder="例如：再喜庆一点" onInput={(event) => setInput(event.detail.value)} /><Text className="send-button" onClick={sendMessage}>发送</Text></View>
       </View>
-      <View className="card">
-        <Input value={input} placeholder="例如：生成一条新品咖啡朋友圈文案" onInput={(event) => setInput(event.detail.value)} />
-        <Button style={{ marginTop: '20px' }} onClick={recordVoice}>按住说话</Button>
-        <Button className="primary-button" style={{ marginTop: '20px' }} loading={loading} onClick={sendMessage}>生成 3 个版本</Button>
-      </View>
+      <View className="card"><Text className="section-label">灵感提示</Text><View className="pill-row"><Text className="pill" onClick={() => setInput('写一条520爱的礼物季文案')}>520爱的礼物季</Text><Text className="pill" onClick={() => setInput('突出钻石的火彩与寓意')}>突出钻石火彩</Text><Text className="pill" onClick={() => setInput('适合门店顾问口吻')}>顾问口吻</Text></View><Button className="secondary-button" style={{ marginTop: '24px' }} onClick={() => Taro.navigateTo({ url: '/pages/pro/index' })}>去配图，做成一套内容 ›</Button></View>
     </View>
   );
 }

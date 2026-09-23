@@ -1,12 +1,11 @@
 import { Button, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
-import { track } from '../../services/track';
+import { useState } from 'react';
 
 export default function WorkDetailPage() {
-  const copyAndSave = async () => {
-    await Taro.setClipboardData({ data: '今天到店，享受一杯专属好心情。' });
-    track('click_publish', { workId: 'demo-work' });
-    Taro.showToast({ title: '已复制文案并存图，去朋友圈粘贴发布', icon: 'none' });
-  };
-  return <View className="page"><View className="card"><Text style={{ display: 'block', fontSize: '42px', fontWeight: '600', marginBottom: '20px' }}>春日新品推广</Text><Text style={{ display: 'block', lineHeight: '1.8' }}>春风已至，新品正好。到店解锁春日限定风味，和喜欢的人分享今天的好心情。</Text></View><Button className="primary-button" onClick={copyAndSave}>发朋友圈</Button><Button style={{ marginTop: '20px' }} onClick={() => { track('publish_confirmed', { workId: 'demo-work' }); Taro.showToast({ title: '已提交发布记录', icon: 'success' }); }}>我已发布</Button></View>;
+  const [showPublish, setShowPublish] = useState(false);
+  const [prepared, setPrepared] = useState(false);
+  const [published, setPublished] = useState(false);
+  const copyAndSave = async () => { await Taro.setClipboardData({ data: '一枚戒指，藏着两个人对未来的想象。新款钻戒抵达门店，欢迎来挑选属于你们的那一束光。' }); setPrepared(true); Taro.showToast({ title: '文案已复制，素材已存相册', icon: 'success' }); };
+  return <View className="page"><View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">作品详情</Text><Text className="chat-scene">可发布</Text></View><View className="detail-preview">💍</View><View className="card"><View className="row-between"><Text className="page-title" style={{ fontSize: '36px' }}>春日新品对戒</Text><Text className="status-tag status-ready" style={{ marginTop: 0 }}>可发布</Text></View><Text className="muted" style={{ display: 'block', marginTop: '12px', fontSize: '22px' }}>图片 · 今天 10:24 · 轻奢风</Text><Text className="section-title" style={{ fontSize: '28px' }}>配套文案</Text><Text className="detail-copy">一枚戒指，藏着两个人对未来的想象。新款钻戒抵达门店，欢迎来挑选属于你们的那一束光。</Text><Text className="section-title" style={{ fontSize: '28px' }}>发布状态</Text><Text className="muted" style={{ display: 'block', fontSize: '23px' }}>{published ? '✓ 已发布，任务已核销' : prepared ? '已准备好素材，去微信粘贴发布' : '还没有开始发布'}</Text></View><Button className="primary-button" onClick={() => setShowPublish(true)}>发朋友圈</Button><Button className="secondary-button" style={{ marginTop: '16px' }} onClick={() => Taro.showToast({ title: '已复制文案', icon: 'success' })}>复制文案</Button>{showPublish && <><View className="modal-mask" onClick={() => setShowPublish(false)} /><View className="publish-sheet"><View className="row-between"><Text className="page-title" style={{ fontSize: '34px' }}>发布到：朋友圈</Text><Text className="gold" style={{ fontSize: '28px' }} onClick={() => setShowPublish(false)}>×</Text></View><View className="step-line"><Text className="step-number">1</Text><Text>{prepared ? '文案已复制 · 素材已存相册 ✓' : '一键准备文案和素材'}</Text></View><Button className={prepared ? 'secondary-button' : 'primary-button'} onClick={copyAndSave}>{prepared ? '已准备好' : '一键准备'}</Button><View className="step-line"><Text className="step-number">2</Text><Text>打开朋友圈，粘贴文案并发布</Text></View><Button className="secondary-button" onClick={() => Taro.showToast({ title: '请打开微信朋友圈发布', icon: 'none' })}>去微信粘贴发布</Button><View className="step-line"><Text className="step-number">3</Text><Text>发完了？提交发布记录完成任务</Text></View><Button className="primary-button" onClick={() => { setPublished(true); setShowPublish(false); Taro.showToast({ title: '任务已完成', icon: 'success' }); }}>我已发布</Button></View></>}</View>;
 }

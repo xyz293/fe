@@ -8,10 +8,8 @@ import './styles.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#1677ff', borderRadius: 8 } }}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+    <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#b8874f', borderRadius: 10, colorBgLayout: '#fbf8f5' } }}>
+      <BrowserRouter><App /></BrowserRouter>
     </ConfigProvider>
   </React.StrictMode>,
 );
