@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro';
 
-export type TrackEvent = 'enter_create' | 'generate_complete' | 'select_version' | 'click_publish' | 'publish_confirmed';
+export type TrackEvent = 'enter_create' | 'create_generate' | 'generate_result' | 'work_publish' | 'task_finish' | 'quota_insufficient' | 'generate_complete' | 'select_version' | 'click_publish' | 'publish_confirmed';
 
 const TRACK_BASE_URL = process.env.TARO_APP_TRACK_BASE_URL || 'http://localhost:8080/api';
 

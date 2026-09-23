@@ -8,6 +8,32 @@ body { margin: 0; min-width: 1180px; background: #fbf8f5; color: #3d2a2f; font-f
 .ant-menu-light .ant-menu-item-selected::after { border-right-color: #c9a46c; }
 .app-header { display: flex; justify-content: space-between; align-items: center; height: 72px; padding: 0 32px; background: #fffdfb; border-bottom: 1px solid #f0e4da; }
 .header-context { color: #a78362; font-size: 13px; }
+.header-icon { color: #8e6b55; font-size: 18px; cursor: pointer; }
+.trend-value { margin-right: 4px; font-weight: 600; }
+.platform-page .ant-card { height: 100%; }
+.platform-stat-card .ant-statistic-content { font-size: 28px; }
+.platform-stat-card .stat-extra { position: relative; z-index: 1; min-height: 22px; margin-top: 12px; color: #987e75; font-size: 12px; }
+.platform-trend { min-height: 220px; padding: 20px 8px 0; }
+.trend-bars { display: flex; align-items: flex-end; gap: 5px; height: 180px; padding: 0 4px; border-bottom: 1px solid #f0e4da; background: repeating-linear-gradient(to bottom, transparent 0, transparent 44px, #f6eee8 45px); }
+.trend-bar-wrap { display: flex; align-items: flex-end; justify-content: center; flex: 1; height: 100%; min-width: 5px; }
+.trend-bar { width: 100%; max-width: 18px; border-radius: 6px 6px 0 0; background: linear-gradient(180deg, #d9b877, #b8874f); transition: height .25s ease; }
+.trend-labels { display: flex; justify-content: space-between; padding: 10px 4px 0; color: #a38d84; font-size: 12px; }
+.platform-ranking { display: grid; grid-template-columns: 28px minmax(90px, 1fr) minmax(100px, 1.3fr) 72px; align-items: center; gap: 10px; width: 100%; }
+.platform-ranking .ant-progress { margin: 0; }
+.ratio-layout { display: flex; align-items: center; gap: 34px; min-height: 220px; }
+.ratio-donut { width: 168px; height: 168px; flex: 0 0 168px; border-radius: 50%; background: conic-gradient(#c9a46c 0 62%, #d58b83 62% 100%); position: relative; }
+.ratio-donut::after { position: absolute; inset: 35px; border-radius: 50%; content: ''; background: #fffdfb; }
+.platform-todos { padding: 10px 0; }
+.platform-todos .anticon { width: 20px; color: #c18b4e; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+.full-input { width: 100%; }
+.detail-tabs { padding: 18px; border: 1px dashed #eadccd; border-radius: 10px; background: #fffaf5; }
+.prompt-template-editor textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.65; }
+.prompt-preview { min-height: 100px; padding: 14px; margin: 0; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.65; background: #fffaf5; }
+.monitor-failed-row td { background: #fff2f0 !important; }
+.monitor-detail { padding: 8px 2px; }
+.monitor-detail .ant-typography + div { margin-top: 6px; color: #4b3634; }
+.snapshot-text { padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; background: #fffaf5; line-height: 1.6; }
 .user-menu { cursor: pointer; }
 .app-content { padding: 32px; background: #fbf8f5; }
 .full-width { display: flex; width: 100%; }

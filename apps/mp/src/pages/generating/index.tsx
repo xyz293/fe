@@ -1,24 +1,29 @@
-import { Button, Text, View } from '@tarojs/components';
+import { Button, Image, Text, Video, View } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
-import { useEffect, useState } from 'react';
-import type { AsyncTask } from '@xiaoa/share/types';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { sharedApi } from '../../utils/sharedAdapter';
+import { track } from '../../services/track';
+
+interface WorkStatusResponse { status: 0 | 1 | 2 | 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED'; workId?: string | number; contentUrl?: string; errorCode?: string; errorMessage?: string; progress?: number; }
+type AIGenerationType = 'IMAGE' | 'VIDEO';
+const FAIL_REASON_MAP: Record<string, string> = { MODEL_TIMEOUT: '生成超时了，请重试', CONTENT_EMPTY: '这次没生成好，换个描述试试', CONTENT_RISK: '内容包含敏感词，请调整文案', QUOTA_ROLLBACK: '积分已退回，请重新生成' };
+type PollState = 'idle' | 'pending' | 'success' | 'error' | 'timeout';
+function isDone(status: WorkStatusResponse) { return status.status === 1 || status.status === 2 || status.status === 'SUCCESS' || status.status === 'FAILED'; }
+function isSuccess(status?: WorkStatusResponse | null) { return status?.status === 1 || status?.status === 'SUCCESS'; }
+function isFailed(status?: WorkStatusResponse | null) { return status?.status === 2 || status?.status === 'FAILED'; }
+function failReason(status?: WorkStatusResponse | null) { return status?.errorCode ? FAIL_REASON_MAP[status.errorCode] || status.errorMessage || '生成失败，请稍后重试' : status?.errorMessage || '生成失败，请稍后重试'; }
+
+function useWorkPolling(workId: string) {
+  const [state, setState] = useState<PollState>(workId ? 'pending' : 'idle'); const [data, setData] = useState<WorkStatusResponse | null>(null); const [error, setError] = useState<Error | null>(null); const startedAt = useRef(0); const active = useRef(true);
+  useEffect(() => { active.current = true; if (!workId) { setState('idle'); return () => { active.current = false; }; } startedAt.current = Date.now(); setState('pending'); setData(null); setError(null); let timer: ReturnType<typeof setTimeout> | undefined; const poll = async () => { if (!active.current) return; if (Date.now() - startedAt.current >= 300000) { setState('timeout'); return; } try { const result = await sharedApi.getWorkStatus(workId); if (!active.current) return; setData(result); if (isDone(result)) { setState('success'); return; } timer = setTimeout(poll, 3000); } catch (requestError) { if (!active.current) return; setError(requestError instanceof Error ? requestError : new Error('任务查询失败')); setState('error'); } }; void poll(); return () => { active.current = false; if (timer) clearTimeout(timer); }; }, [workId]);
+  return { state, data, error };
+}
 
 export default function GeneratingPage() {
-  const [task, setTask] = useState<AsyncTask | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [taskId, setTaskId] = useState('');
-  const [error, setError] = useState('');
-  useLoad((params) => { if (params.taskId) setTaskId(params.taskId); });
-  useEffect(() => {
-    if (!taskId) return undefined;
-    let active = true;
-    const load = () => { sharedApi.getAsyncTask(taskId).then((result) => { if (active) { setTask(result); setFailed(result.status === 'FAILED'); if (result.status === 'FAILED') setError(result.errorMessage || '生成失败'); } }).catch((requestError) => { if (active) setError(requestError instanceof Error ? requestError.message : '任务查询失败'); }); };
-    load();
-    const timer = setInterval(load, 3000);
-    return () => { active = false; clearInterval(timer); };
-  }, [taskId]);
-  const progress = task?.progress || 0;
-  const finish = () => Taro.redirectTo({ url: `/pages/work-detail/index?id=${task?.result?.workId || ''}` });
-  return <View className="page"><View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">生成任务</Text><Text className="chat-scene">后台运行</Text></View><View className="progress-card card">{failed || error ? <><Text style={{ display: 'block', fontSize: '70px' }}>↻</Text><Text className="page-title" style={{ marginTop: '18px', fontSize: '38px' }}>这次生成没有完成</Text><Text className="hero-copy" style={{ margin: '16px auto' }}>{error || '请调整素材后再次尝试。'}</Text><Button className="primary-button" style={{ marginTop: '30px' }} onClick={() => { setFailed(false); setError(''); }}>重新查询</Button></> : <><View className="progress-ring"><Text className="progress-number">{progress}%</Text></View><Text className="page-title" style={{ fontSize: '38px' }}>{task?.status === 'SUCCESS' ? '生成完成' : '生成中…'}</Text><Text className="hero-copy" style={{ margin: '16px auto' }}>正在把你的婚戒故事变成一段值得分享的短视频</Text><View className="progress-track"><View className="progress-fill" style={{ width: `${progress}%` }} /></View><Text className="muted" style={{ fontSize: '23px' }}>{task?.status === 'SUCCESS' ? '作品已生成，可以查看详情' : '任务状态来自后端接口'}</Text><View style={{ display: 'flex', gap: '16px', marginTop: '34px' }}><Button className="secondary-button" style={{ flex: 1 }} onClick={() => Taro.switchTab({ url: '/pages/index/index' })}>返回首页</Button><Button className="primary-button" style={{ flex: 1 }} disabled={task?.status !== 'SUCCESS'} onClick={finish}>查看作品</Button></View></>}</View></View>;
+  const [workId, setWorkId] = useState(''); const [type, setType] = useState<AIGenerationType>('IMAGE'); const startedAt = useMemo(() => Date.now(), []); const reportedRef = useRef(false);
+  useLoad((params) => { if (params.workId || params.taskId) setWorkId(params.workId || params.taskId); if (params.type === 'VIDEO') setType('VIDEO'); });
+  const polling = useWorkPolling(workId); const status = polling.data; const progress = Math.min(100, Math.max(0, status?.progress || (polling.state === 'success' && isSuccess(status) ? 100 : 0))); const done = isSuccess(status); const failed = isFailed(status) || polling.state === 'error' || polling.state === 'timeout';
+  useEffect(() => { if (!reportedRef.current && status && (done || failed)) { reportedRef.current = true; track('generate_result', { workId: status.workId || workId, success: done, duration: Date.now() - startedAt, errorCode: status.errorCode }); } }, [done, failed, startedAt, status, workId]);
+  const goWork = () => { const id = status?.workId || workId; Taro.redirectTo({ url: `/pages/work-detail/index?id=${id}` }); }; const retry = () => Taro.redirectTo({ url: `/pages/pro/index?type=${type === 'VIDEO' ? 'video' : 'image'}` });
+  return <View className="page generating-page"><View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">生成中</Text><Text className="chat-scene">后台运行</Text></View><View className="progress-card card">{failed ? <><Text className="generation-symbol">↻</Text><Text className="page-title generation-title">生成没有完成</Text><Text className="hero-copy generation-copy">{polling.state === 'timeout' ? '生成较慢，可稍后在作品列表查看' : failReason(status)}</Text>{(status?.errorCode === 'QUOTA_ROLLBACK' || status?.errorMessage?.includes('退回')) && <Text className="refund-note">积分已退回</Text>}<Button className="primary-button" style={{ marginTop: '30px' }} onClick={retry}>重新生成</Button><Button className="secondary-button" style={{ marginTop: '16px' }} onClick={() => Taro.switchTab({ url: '/pages/works/index' })}>返回作品列表</Button></> : done ? <><Text className="generation-symbol success-symbol">✓</Text><Text className="page-title generation-title">生成完成</Text>{status?.contentUrl && (type === 'VIDEO' ? <Video className="generation-media" src={status.contentUrl} controls /> : <Image className="generation-media" src={status.contentUrl} mode="widthFix" />)}<Text className="hero-copy generation-copy">成品已经准备好，可以继续发布打卡或打开作品详情。</Text><Button className="primary-button" onClick={goWork}>查看作品</Button></> : <><View className="ai-breath"><Text>✦</Text><Text>AI 创作中…</Text><Text>✦</Text></View><Text className="page-title generation-title">正在把你的灵感变成成品</Text><Text className="hero-copy generation-copy">预计 1 分钟内完成，离开页面也不会取消任务。</Text><View className="progress-track"><View className="progress-fill" style={{ width: `${progress}%` }} /></View><Text className="muted" style={{ fontSize: '23px' }}>{progress ? `已完成 ${progress}%` : '正在准备素材和创作方案'}</Text><Button className="secondary-button" style={{ marginTop: '34px' }} onClick={() => Taro.switchTab({ url: '/pages/works/index' })}>返回作品列表</Button></>}</View>{polling.error && <View className="notice-bar"><Text>{polling.error.message}</Text></View>}<Text className="muted generation-id">任务 ID：{workId}</Text></View>;
 }

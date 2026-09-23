@@ -6,8 +6,8 @@ export interface WorkCardProps {
 }
 
 const typeLabels: Record<Work['type'], string> = { COPY: '婚戒文案', IMAGE: '珠宝海报', VIDEO: '婚礼短视频' };
-const statusLabels: Record<Work['status'], string> = { DRAFT: '灵感草稿', PENDING_REVIEW: '待品牌审核', READY: '可发布', REJECTED: '需重新打磨' };
-const statusColors: Record<Work['status'], string> = { DRAFT: '#8d7479', PENDING_REVIEW: '#c9a46c', READY: '#7a9b76', REJECTED: '#b33a4a' };
+const statusLabels: Record<string, string> = { 0: '草稿', 1: '待审核', 2: '可发布', 3: '已驳回', 4: '已发布', 5: '生成失败', DRAFT: '灵感草稿', PENDING_REVIEW: '待品牌审核', READY: '可发布', REJECTED: '需重新打磨' };
+const statusColors: Record<string, string> = { 0: '#8d7479', 1: '#c9a46c', 2: '#7a9b76', 3: '#b33a4a', 4: '#7a9b76', 5: '#b33a4a', DRAFT: '#8d7479', PENDING_REVIEW: '#c9a46c', READY: '#7a9b76', REJECTED: '#b33a4a' };
 
 export function WorkCard({ work, onClick }: WorkCardProps) {
   return (

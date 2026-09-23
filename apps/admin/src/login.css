@@ -1,0 +1,18 @@
+.login-page { position: relative; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; background: radial-gradient(circle at 12% 18%, #fff1d8 0, transparent 32%), radial-gradient(circle at 88% 80%, #f4ded5 0, transparent 34%), #fbf8f5; }
+.login-decoration { position: absolute; width: 340px; height: 340px; border: 1px solid rgba(201, 164, 108, .25); border-radius: 50%; }
+.login-decoration::after { position: absolute; inset: 36px; border: 1px solid rgba(201, 164, 108, .16); border-radius: 50%; content: ''; }
+.login-decoration-left { top: -150px; left: -120px; }
+.login-decoration-right { right: -120px; bottom: -150px; }
+.login-card { z-index: 1; width: 460px; padding: 16px; border: 1px solid #f0e4da; border-radius: 22px; box-shadow: 0 24px 70px rgba(108, 74, 55, .12); }
+.login-card .ant-card-body { padding: 30px; }
+.login-brand { display: flex; align-items: center; gap: 14px; }
+.login-brand .brand-mark { width: 44px; height: 44px; }
+.login-brand h3 { margin: 0; color: #3d2a2f; }
+.login-brand .ant-typography { color: #a78362; }
+.login-heading { margin: 48px 0 28px; }
+.login-heading h1 { margin: 14px 0 8px; color: #3d2a2f; font-size: 34px; }
+.login-heading p { margin: 0; color: #987e75; }
+.login-error { padding: 11px 14px; margin-bottom: 18px; border: 1px solid #ffccc7; border-radius: 8px; color: #a8071a; background: #fff2f0; }
+.login-tip { width: 100%; margin-top: 30px; text-align: center; }
+.auth-loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fbf8f5; }
+@media (max-width: 600px) { .login-card { width: calc(100vw - 32px); } }
