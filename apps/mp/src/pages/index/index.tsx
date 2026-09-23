@@ -1,7 +1,7 @@
 import { Button, Text, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { useState } from 'react';
-import type { Task } from '@xiaoa/share/types';
+import type { Badge, Task } from '@xiaoa/share/types';
 import { useAppStore } from '../../store';
 import { sharedApi } from '../../utils/sharedAdapter';
 
@@ -12,22 +12,34 @@ const entries = [
   { icon: '💬', title: '聊思路', copy: '让 AI 帮你想', url: '/pages/chat/index' },
 ];
 
-function getTaskId(task: Task) {
-  return String(task.id);
-}
+function getTaskId(task: Task) { return String(task.id); }
+function today() { return new Date().toISOString().slice(0, 10); }
 
 export default function HomePage() {
   const user = useAppStore((state) => state.user);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [storeFinished, setStoreFinished] = useState<number | null>(null);
+  const [storeExpected, setStoreExpected] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const loadTasks = () => {
     setLoading(true);
     setError('');
-    sharedApi.getMyTasks()
-      .then(setTasks)
-      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : '任务加载失败'))
+    // 文档 §10.1 员工首页调用方案
+    Promise.all([
+      sharedApi.getMyTasks(),
+      sharedApi.getTaskBadges(),
+      sharedApi.getStoreBoard(String(user?.storeId || user?.orgId || ''), today()),
+    ])
+      .then(([taskList, badgeList, board]) => {
+        setTasks(taskList);
+        setBadges(badgeList);
+        setStoreFinished(board.finished);
+        setStoreExpected(board.expected);
+      })
+      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : '数据加载失败'))
       .finally(() => setLoading(false));
   };
 
@@ -37,15 +49,41 @@ export default function HomePage() {
   const completed = tasks.filter((task) => task.recordStatus === 1).length;
   const firstPending = tasks.find((task) => task.recordStatus !== 1);
   const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
+  const achievedBadges = badges.filter((b) => b.achieved);
 
   return (
     <View className="page">
       <View className="topbar"><View className="brand-row"><Text className="brand-mark">AI</Text><View><Text className="page-title" style={{ fontSize: '32px' }}>{user?.storeName || '我的门店'}</Text><Text className="page-subtitle">今天也为爱创作</Text></View></View><Text style={{ fontSize: '36px' }} onClick={() => Taro.switchTab({ url: '/pages/messages/index' })}>🔔</Text></View>
       <View className="hero-card"><Text className="hero-eyebrow">JEWELRY · CONTENT STUDIO</Text><Text className="hero-title">把每一份心意，写成值得分享的故事</Text><Text className="hero-copy">婚戒、钻石与婚礼内容，一句话就能开始。小AI陪你把灵感变成今天就能发布的内容。</Text></View>
       <View className="task-card card"><View className="task-head"><Text className="task-title">今日任务</Text><Text className="task-count">{completed} / {tasks.length}</Text></View><View className="task-progress"><View className="task-progress-fill" style={{ width: `${progress}%` }} /></View>{loading && <Text className="muted" style={{ fontSize: '24px' }}>正在同步任务…</Text>}{!loading && error && <View><Text className="muted" style={{ display: 'block', fontSize: '24px' }}>{error}</Text><Button className="secondary-button" style={{ marginTop: '18px' }} onClick={loadTasks}>重新加载</Button></View>}{!loading && !error && tasks.length === 0 && <Text className="muted" style={{ fontSize: '24px' }}>今日暂无任务，去创作吧</Text>}{!loading && !error && tasks.map((task) => <View className="task-line" key={getTaskId(task)} onClick={() => go(`/pages/chat/index?taskId=${getTaskId(task)}`)}><Text className={task.recordStatus === 1 ? 'task-dot' : 'task-dot todo'}>{task.recordStatus === 1 ? '✓' : '○'}</Text><Text>{task.title}</Text></View>)}{firstPending && <Button className="secondary-button" style={{ marginTop: '22px' }} onClick={() => go(`/pages/chat/index?taskId=${getTaskId(firstPending)}`)}>去完成</Button>}</View>
+      {/* 门店看板数据（文档 §7.1） */}
+      {storeExpected !== null && (
+        <View className="card" style={{ marginTop: '24px' }}>
+          <Text className="section-title" style={{ margin: 0 }}>门店完成情况</Text>
+          <Text className="balance">{storeFinished} / {storeExpected}</Text>
+          <Text className="muted" style={{ fontSize: '22px' }}>数据来自 /api/task/store-board</Text>
+        </View>
+      )}
+      {/* 勋章（文档 §9.2） */}
+      {achievedBadges.length > 0 && (
+        <View className="card" style={{ marginTop: '24px' }} onClick={() => go('/pages/badges/index')}>
+          <View className="row-between">
+            <Text className="section-title" style={{ margin: 0 }}>任务勋章</Text>
+            <Text className="gold">查看全部 ›</Text>
+          </View>
+          <View style={{ display: 'flex', gap: '16px', marginTop: '12px', overflowX: 'auto' }}>
+            {achievedBadges.map((badge) => (
+              <View key={badge.code} style={{ textAlign: 'center', minWidth: '120px' }}>
+                <Text style={{ display: 'block', fontSize: '40px' }}>{badge.code === 'STREAK_7_DAYS' ? '🔥' : badge.code === 'WEEK_100_PERCENT' ? '⭐' : badge.code === 'MONTH_TASK_STAR' ? '🏆' : '👑'}</Text>
+                <Text className="muted" style={{ display: 'block', fontSize: '20px', marginTop: '4px' }}>{badge.name}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
       <Text className="section-title">今天想做什么？</Text><View className="entry-grid">{entries.map((entry) => <View className="entry-item" key={entry.title} onClick={() => go(entry.url)}><Text className="entry-icon">{entry.icon}</Text><Text className="entry-title">{entry.title}</Text><Text className="entry-copy">{entry.copy}</Text></View>)}</View>
       <View className="voice-button" onClick={() => Taro.showToast({ title: '语音识别接口待接入', icon: 'none' })}><Text style={{ marginRight: '12px', fontSize: '32px' }}>🎤</Text><Text>按住说话，我来帮你写</Text></View>
-      <View className="card" style={{ marginTop: '24px' }}><Text className="section-title" style={{ margin: 0 }}>任务完成情况</Text><Text className="balance">{completed} / {tasks.length}</Text><Text className="muted" style={{ fontSize: '22px' }}>{tasks.length ? '数据来自 /api/task/my' : '当前周期没有命中任务'}</Text></View>
+      <View className="card" style={{ marginTop: '24px' }} onClick={() => go('/pages/ranking/index')}><View className="row-between"><Text className="section-title" style={{ margin: 0 }}>排行榜</Text><Text className="gold">查看 ›</Text></View><Text className="muted" style={{ fontSize: '22px' }}>周榜 / 月榜 · 门店榜 / 全国榜</Text></View>
     </View>
   );
 }

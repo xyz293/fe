@@ -402,6 +402,93 @@ export interface RemindTaskRequest {
   periodDate?: string;
 }
 
+// ===== 管理端任务统计（文档 §8） =====
+
+export interface TaskBoardItem {
+  taskId: LongId;
+  title: string;
+  status: TaskStatus;
+  targetScope: TaskTargetScope;
+  periodDate: string;
+  expected: number;
+  finished: number;
+  completionRate: number;
+}
+
+export interface TaskBoard {
+  date: string;
+  tasks: TaskBoardItem[];
+}
+
+export interface TaskStoreSummary {
+  storeId: LongId;
+  storeName: string;
+  expected: number;
+  finished: number;
+  completionRate: number;
+}
+
+export interface TaskBoardRecord {
+  id: LongId;
+  taskId: LongId;
+  userId: LongId;
+  nickname?: string;
+  storeId: LongId;
+  storeName?: string;
+  periodDate: string;
+  status: 0 | 1;
+  publishRecordId?: LongId | null;
+  proofUrl?: string;
+  finishedAt?: string | null;
+}
+
+export interface AdminTaskReport {
+  taskId: LongId;
+  periodDate: string;
+  expected: number;
+  finished: number;
+  completionRate: number;
+  records: StoreTaskRecord[];
+}
+
+// ===== 排行榜与勋章（文档 §9） =====
+
+export type RankingScope = 'NATIONAL' | 'STORE';
+export type RankingPeriod = 'WEEK' | 'MONTH';
+
+export interface RankingQuery {
+  scope?: RankingScope;
+  period?: RankingPeriod;
+  storeId?: LongId;
+  limit?: number;
+}
+
+export interface RankingItem {
+  rank: number;
+  userId: LongId;
+  nickname: string;
+  storeId: LongId;
+  storeName: string;
+  expected: number;
+  finished: number;
+  completionRate: number;
+  lastFinishedAt?: string | null;
+}
+
+export interface BadgeQuery {
+  userId?: LongId;
+  date?: string;
+}
+
+export interface Badge {
+  code: string;
+  name: string;
+  description: string;
+  achieved: boolean;
+  value: number;
+  threshold: number;
+}
+
 export type PlatformPeriod = 'month' | 'week' | 'year';
 export type PlatformTenantStatus = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'DISABLED' | 0 | 1 | 2 | 3;
 export type PlatformPlanStatus = 'ACTIVE' | 'INACTIVE' | 0 | 1;

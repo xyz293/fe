@@ -20,6 +20,10 @@ client.interceptors.response.use((response) => {
     window.location.href = '/login';
     return Promise.reject(new Error(result.msg || '登录已过期'));
   }
+  if (result.code === 2004) {
+    message.warning(result.msg || '账号未入店');
+    return Promise.reject(new Error(result.msg || '账号未入店'));
+  }
   if (result.code !== 0) {
     message.error(result.msg || '请求失败');
     return Promise.reject(new Error(result.msg || '请求失败'));

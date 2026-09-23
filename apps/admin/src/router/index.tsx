@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { BgColorsOutlined, CalendarOutlined, CheckSquareOutlined, CloudServerOutlined, DashboardOutlined, DollarOutlined, PictureOutlined, SafetyOutlined, SettingOutlined, ShopOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons';
+import { BgColorsOutlined, BellOutlined, CalendarOutlined, CheckSquareOutlined, CloudServerOutlined, DashboardOutlined, DollarOutlined, PictureOutlined, SafetyOutlined, SettingOutlined, ShopOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { CrudPage } from '../pages/CrudPage';
 import { DashboardPage } from '../pages/DashboardPage';
@@ -7,6 +7,10 @@ import { PlatformDashboardPage } from '../pages/PlatformDashboardPage';
 import { PlatformCustomersPage, PlatformPlansPage, PlatformRechargesPage, PlatformTenantsPage } from '../pages/PlatformPages';
 import { GenerationTasksPage, PromptTemplatesPage } from '../pages/AiPages';
 import { TenantWorkspacePage } from '../pages/TenantWorkspacePage';
+import { TaskBoardPage } from '../pages/TaskBoardPage';
+import { TaskReportPage } from '../pages/TaskReportPage';
+import { TaskModifyLogsPage } from '../pages/TaskModifyLogsPage';
+import { TaskRemindPage } from '../pages/TaskRemindPage';
 import LoginPage from '../pages/LoginPage';
 
 export interface AdminMenuItem { key: string; icon: ReactNode; label: string; }
@@ -20,6 +24,10 @@ export const adminMenus: AdminMenuItem[] = [
   { key: '/admin/calendar', icon: <CalendarOutlined />, label: '营销日历' },
   { key: '/admin/styles', icon: <BgColorsOutlined />, label: '风格库' },
   { key: '/admin/tasks', icon: <CheckSquareOutlined />, label: '任务管理' },
+  { key: '/admin/task-board', icon: <DashboardOutlined />, label: '任务看板' },
+  { key: '/admin/task-report', icon: <CheckSquareOutlined />, label: '任务报表' },
+  { key: '/admin/task-remind', icon: <BellOutlined />, label: '任务提醒' },
+  { key: '/admin/task-modify-logs', icon: <CheckSquareOutlined />, label: '任务修改记录' },
   { key: '/admin/quota', icon: <WalletOutlined />, label: '算力总池' },
   { key: '/admin/compliance', icon: <SafetyOutlined />, label: '合规中心' },
   { key: '/admin/prompt-templates', icon: <SettingOutlined />, label: 'AI · Prompt 模板' },
@@ -38,6 +46,10 @@ export const pageConfig: Record<string, PageConfig> = {
   '/admin/calendar': { title: '营销日历', description: '围绕 520、七夕和婚礼季维护节点内容包。', columns: ['内容包', '适用门店', '营销日期', '状态', '操作'] },
   '/admin/styles': { title: '风格库', description: '维护轻奢、婚庆、国风等行业内容表达。', columns: ['风格名称', '适用场景', '使用次数', '状态', '操作'] },
   '/admin/tasks': { title: '任务管理', description: '下发门店营销任务并查看三级执行看板。', columns: ['任务名称', '执行对象', '周期', '完成率', '操作'] },
+  '/admin/task-board': { title: '任务看板', description: '三级下钻：总看板 → 门店汇总 → 员工明细。', columns: [] },
+  '/admin/task-report': { title: '任务报表', description: '查询指定任务的完成率和记录明细。', columns: [] },
+  '/admin/task-remind': { title: '任务提醒', description: '对未完成任务的员工发送提醒。', columns: [] },
+  '/admin/task-modify-logs': { title: '任务修改记录', description: '查询任务编辑历史。', columns: [] },
   '/admin/quota': { title: '算力总池', description: '管理企业额度、门店分配和消耗报表。', columns: ['门店', '已分配', '已消耗', '余额', '操作'] },
   '/admin/compliance': { title: '合规中心', description: '维护品牌词库与品牌、门店级审核开关。', columns: ['词条', '风险级别', '适用范围', '更新时间', '操作'] },
   '/admin/prompt-templates': { title: 'Prompt 模板管理', description: '版本化维护后端 AI prompt 模板，前端只传原始意图。', columns: [] },
@@ -51,5 +63,24 @@ export const pageConfig: Record<string, PageConfig> = {
 export function getPageConfig(pathname: string) { return pageConfig[pathname]; }
 
 export function AppRoutes() {
-  return <Routes><Route path="/login" element={<LoginPage />} /><Route path="/" element={<Navigate to="/admin/dashboard" replace />} /><Route path="/admin/dashboard" element={<DashboardPage />} /><Route path="/admin/tenant-workspace" element={<TenantWorkspacePage {...pageConfig['/admin/tenant-workspace']} />} /><Route path="/admin/prompt-templates" element={<PromptTemplatesPage />} /><Route path="/admin/generation-tasks" element={<GenerationTasksPage />} /><Route path="/platform/dashboard" element={<PlatformDashboardPage />} /><Route path="/platform/tenants" element={<PlatformTenantsPage {...pageConfig['/platform/tenants']} />} /><Route path="/platform/plans" element={<PlatformPlansPage {...pageConfig['/platform/plans']} />} /><Route path="/platform/recharges" element={<PlatformRechargesPage {...pageConfig['/platform/recharges']} />} /><Route path="/platform/customers" element={<PlatformCustomersPage {...pageConfig['/platform/customers']} />} />{Object.entries(pageConfig).filter(([path]) => !path.startsWith('/platform/')).map(([path, config]) => <Route key={path} path={path} element={<CrudPage {...config} />} />)}</Routes>;
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+      <Route path="/admin/dashboard" element={<DashboardPage />} />
+      <Route path="/admin/tenant-workspace" element={<TenantWorkspacePage {...pageConfig['/admin/tenant-workspace']} />} />
+      <Route path="/admin/task-board" element={<TaskBoardPage />} />
+      <Route path="/admin/task-report" element={<TaskReportPage />} />
+      <Route path="/admin/task-remind" element={<TaskRemindPage />} />
+      <Route path="/admin/task-modify-logs" element={<TaskModifyLogsPage />} />
+      <Route path="/admin/prompt-templates" element={<PromptTemplatesPage />} />
+      <Route path="/admin/generation-tasks" element={<GenerationTasksPage />} />
+      <Route path="/platform/dashboard" element={<PlatformDashboardPage />} />
+      <Route path="/platform/tenants" element={<PlatformTenantsPage {...pageConfig['/platform/tenants']} />} />
+      <Route path="/platform/plans" element={<PlatformPlansPage {...pageConfig['/platform/plans']} />} />
+      <Route path="/platform/recharges" element={<PlatformRechargesPage {...pageConfig['/platform/recharges']} />} />
+      <Route path="/platform/customers" element={<PlatformCustomersPage {...pageConfig['/platform/customers']} />} />
+      {Object.entries(pageConfig).filter(([path]) => !path.startsWith('/platform/') && !['/admin/tenant-workspace', '/admin/task-board', '/admin/task-report', '/admin/task-remind', '/admin/task-modify-logs'].includes(path)).map(([path, config]) => <Route key={path} path={path} element={<CrudPage {...config} />} />)}
+    </Routes>
+  );
 }

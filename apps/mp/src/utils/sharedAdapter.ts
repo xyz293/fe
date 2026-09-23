@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro';
-import type { AsyncTask, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, OrgNode, PageResult, PublishRecord, Quota, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskModifyLog, TaskStatusRequest, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
+import type { AsyncTask, AdminTaskReport, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
 
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -17,6 +17,10 @@ async function request<T>(url: string, options: RequestOptions = {}) {
     await Taro.removeStorage({ key: 'token' });
     Taro.redirectTo({ url: '/pages/login/index' });
     throw new Error(result.msg || '登录已过期');
+  }
+  if (result.code === 2004) {
+    Taro.redirectTo({ url: '/pages/invite/index' });
+    throw new Error(result.msg || '账号未入店，请使用邀请码加入');
   }
   if (result.code !== 0) {
     const error = new Error(result.msg || '请求失败') as Error & { code: number };
@@ -58,6 +62,21 @@ export const sharedApi = {
   getTaskModifyLogs: (taskId: number | string) => request<TaskModifyLog[]>(`/task/${taskId}/modify-logs`),
   getStoreBoard: (storeId: number | string, periodDate: string) => request<StoreBoard>(`/task/store-board?storeId=${encodeURIComponent(storeId)}&periodDate=${encodeURIComponent(periodDate)}`),
   remindTask: (data: RemindTaskRequest) => request<number>('/task/remind', { method: 'POST', data }),
+  getTaskBoard: (date: string) => request<TaskBoard>(`/task/board?date=${encodeURIComponent(date)}`),
+  getTaskStoreSummary: (taskId: number | string, date: string) => request<TaskStoreSummary[]>(`/task/board/stores?taskId=${encodeURIComponent(taskId)}&date=${encodeURIComponent(date)}`),
+  getTaskBoardRecords: (taskId: number | string, storeId: number | string, date: string) => request<TaskBoardRecord[]>(`/task/board/records?taskId=${encodeURIComponent(taskId)}&storeId=${encodeURIComponent(storeId)}&date=${encodeURIComponent(date)}`),
+  getAdminTaskReport: (taskId: number | string, params?: { storeId?: number | string; periodDate?: string }) => {
+    const query = params ? `?${Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}` : '';
+    return request<AdminTaskReport>(`/admin/task/${taskId}/report${query}`);
+  },
+  getTaskRanking: (params: RankingQuery = {}) => {
+    const query = Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
+    return request<RankingItem[]>(`/task/ranking${query ? `?${query}` : ''}`);
+  },
+  getTaskBadges: (params: BadgeQuery = {}) => {
+    const query = Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
+    return request<Badge[]>(`/task/badges${query ? `?${query}` : ''}`);
+  },
   chat: (message: string, taskId?: number | string) => request<ChatResult>('/chat', { method: 'POST', data: { message, ...(taskId ? { taskId } : {}) } }),
   getCreationConfig: () => request<CreationConfig>('/creation/config'),
   generate: (data: GenerateWorkRequest) => request<GenerateResult>('/work/generate', { method: 'POST', data }),

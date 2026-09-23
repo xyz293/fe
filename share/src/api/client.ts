@@ -1,4 +1,5 @@
 import type {
+  AdminTaskReport,
   AsyncTask,
   AuthJoinRequest,
   AuthJoinResult,
@@ -6,6 +7,8 @@ import type {
   AuthMe,
   AuthSession,
   AuthTakeoverRequest,
+  Badge,
+  BadgeQuery,
   ChatResult,
   CreateInviteRequest,
   CreateOrgRequest,
@@ -21,7 +24,12 @@ import type {
   PromptTemplateRequest,
   PublishRecord,
   Quota,
+  RankingItem,
+  RankingQuery,
   RemindTaskRequest,
+  TaskBoard,
+  TaskBoardRecord,
+  TaskStoreSummary,
   PlatformCustomer,
   PlatformCustomerListQuery,
   PlatformCustomerRequest,
@@ -91,6 +99,21 @@ export function createApi(adapter: RequestAdapter) {
     getTaskModifyLogs: (taskId: number | string) => request<TaskModifyLog[]>(`/task/${taskId}/modify-logs`),
     getStoreBoard: (storeId: number | string, periodDate: string) => request<StoreBoard>(`/task/store-board?storeId=${encodeURIComponent(storeId)}&periodDate=${encodeURIComponent(periodDate)}`),
     remindTask: (data: RemindTaskRequest) => request<number>('/task/remind', { method: 'POST', data }),
+    getTaskBoard: (date: string) => request<TaskBoard>(`/task/board?date=${encodeURIComponent(date)}`),
+    getTaskStoreSummary: (taskId: number | string, date: string) => request<TaskStoreSummary[]>(`/task/board/stores?taskId=${encodeURIComponent(taskId)}&date=${encodeURIComponent(date)}`),
+    getTaskBoardRecords: (taskId: number | string, storeId: number | string, date: string) => request<TaskBoardRecord[]>(`/task/board/records?taskId=${encodeURIComponent(taskId)}&storeId=${encodeURIComponent(storeId)}&date=${encodeURIComponent(date)}`),
+    getAdminTaskReport: (taskId: number | string, params?: { storeId?: number | string; periodDate?: string }) => {
+      const query = params ? `?${Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}` : '';
+      return request<AdminTaskReport>(`/admin/task/${taskId}/report${query}`);
+    },
+    getTaskRanking: (params: RankingQuery = {}) => {
+      const query = Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
+      return request<RankingItem[]>(`/task/ranking${query ? `?${query}` : ''}`);
+    },
+    getTaskBadges: (params: BadgeQuery = {}) => {
+      const query = Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
+      return request<Badge[]>(`/task/badges${query ? `?${query}` : ''}`);
+    },
     chat: (message: string, taskId?: number | string) => request<ChatResult>('/chat', { method: 'POST', data: { message, ...(taskId ? { taskId } : {}), industry: 'jewelry-marriage' } }),
     getCreationConfig: () => request<CreationConfig>('/creation/config'),
     generate: (data: GenerateWorkRequest) => request<GenerateResult>('/work/generate', { method: 'POST', data }),
