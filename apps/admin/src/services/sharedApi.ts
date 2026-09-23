@@ -15,7 +15,7 @@ client.interceptors.request.use((config) => {
 
 client.interceptors.response.use((response) => {
   const result = response.data as { code: number; msg: string; data: unknown };
-  if (result.code === 401) {
+  if (result.code === 2001 || result.code === 401) {
     localStorage.removeItem('token');
     window.location.href = '/login';
     return Promise.reject(new Error(result.msg || '登录已过期'));

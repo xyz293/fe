@@ -1,6 +1,8 @@
 import { Button, Input, ScrollView, Text, View } from '@tarojs/components';
-import Taro from '@tarojs/taro';
+import Taro, { useLoad } from '@tarojs/taro';
 import { useState } from 'react';
+import type { Task } from '@xiaoa/share/types';
+import { sharedApi } from '../../utils/sharedAdapter';
 
 const versions = [
   { tag: '轻奢风', content: '一枚戒指，藏着两个人对未来的想象。新款钻戒抵达门店，欢迎来挑选属于你们的那一束光。' },
@@ -11,27 +13,36 @@ const versions = [
 export default function ChatPage() {
   const [input, setInput] = useState('');
   const [selected, setSelected] = useState(1);
-  const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [task, setTask] = useState<Task | null>(null);
+  const [taskError, setTaskError] = useState('');
+
+  useLoad((params) => {
+    if (!params.taskId) return;
+    sharedApi.getTask(params.taskId)
+      .then(setTask)
+      .catch((error) => setTaskError(error instanceof Error ? error.message : '任务加载失败'));
+  });
 
   const sendMessage = () => {
-    if (!input.trim() || loading) return;
-    setLoading(true);
-    setTimeout(() => { setLoading(false); setSent(true); setInput(''); }, 900);
+    if (!input.trim()) return;
+    setSent(true);
+    setInput('');
   };
 
   const refine = () => { setInput('再喜庆一点，更适合婚礼季'); Taro.showToast({ title: '已把微调方向填入输入框', icon: 'none' }); };
-  const finish = () => { Taro.showToast({ title: '已存入我的作品', icon: 'success' }); };
+  const finish = () => { Taro.showToast({ title: '请在作品详情提交发布记录', icon: 'none' }); };
 
   return (
     <View className="page">
       <View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">新对话</Text><Text className="chat-scene">写文案 ▾</Text></View>
+      {task && <View className="notice-bar"><Text>任务：{task.title} · {task.recordStatus === 1 ? '已完成' : '待完成'}</Text></View>}
+      {taskError && <View className="notice-bar"><Text>{taskError}</Text></View>}
       <View className="card" style={{ padding: '22px' }}>
         <View className="chat-flow">
           <View className="bubble bubble-ai">想发什么场景的朋友圈？<Text className="muted" style={{ display: 'block', marginTop: '8px', fontSize: '22px' }}>可以告诉我商品、节日和想表达的感觉</Text></View>
           <View className="bubble bubble-user">新款黄金对戒到货了，想写得浪漫一点</View>
-          {loading && <View className="bubble bubble-ai typing">AI 正在为你组织这份心意 ···</View>}
-          {!loading && <View className="bubble bubble-ai">好的，给你 3 个版本，选择最像你们故事的表达👇</View>}
+          <View className="bubble bubble-ai">好的，给你 3 个版本，选择最像你们故事的表达👇</View>
           {sent && <View className="bubble bubble-user">再喜庆一点，更适合婚礼季</View>}
           <ScrollView className="version-scroll" scrollX>{versions.map((version, index) => <View className={selected === index ? 'version-card selected' : 'version-card'} key={version.tag} onClick={() => setSelected(index)}><Text className="version-tag">版本 {index + 1} · {version.tag}</Text><Text className="version-content">{version.content}</Text><View className="version-actions"><Text className="mini-action">{selected === index ? '✓ 已选定' : '选择此版'}</Text><Text className="mini-action" onClick={refine}>微调</Text><Text className="mini-action" onClick={finish}>定稿</Text></View></View>)}</ScrollView>
         </View>
