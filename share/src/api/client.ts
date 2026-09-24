@@ -1,5 +1,7 @@
 import type {
+  AdminMemberListQuery,
   AdminTaskReport,
+  AssetAdminItem,
   AsyncTask,
   AuthJoinRequest,
   AuthJoinResult,
@@ -7,13 +9,23 @@ import type {
   AuthMe,
   AuthSession,
   AuthTakeoverRequest,
+  AuditConfig,
   Badge,
   BadgeQuery,
   ChatResult,
+  ComplianceWord,
+  ContentPackage,
+  CreateContentPackageRequest,
+  CreateExportRequest,
   CreateInviteRequest,
   CreateOrgRequest,
+  CreateStoreRequest,
+  CreateStyleRequest,
   CreateTaskRequest,
   CreationConfig,
+  DashboardOverview,
+  DashboardTrendPoint,
+  ExportTask,
   GenerateResult,
   GenerateWorkRequest,
   GenerationTaskMonitor,
@@ -23,6 +35,14 @@ import type {
   PromptTemplateQuery,
   PromptTemplateRequest,
   PublishRecord,
+  ReviewAssetRequest,
+  StoreAccountSummary,
+  StyleOption,
+  UpdateAuditConfigRequest,
+  UpsertComplianceWordRequest,
+  UpdateStoreParentRequest,
+  UpdateStyleRequest,
+  UserAccount,
   Quota,
   RankingItem,
   RankingQuery,
@@ -75,6 +95,8 @@ export function createApi(adapter: RequestAdapter) {
     getUser: () => request<User>('/user'),
     openTenant: (data: TenantOpenRequest) => request<TenantOpenResult>('/tenants/open', { method: 'POST', data }),
     getTenant: (tenantId: number | string) => request<TenantDetail>(`/tenants/${tenantId}`),
+    // 文档 §7.3：PATCH /api/tenants/{tenantId}/renew，请求体为 JSON 字符串（如 "2027-09-23 23:59:59"），仅 HQ_ADMIN
+    renewTenant: (tenantId: number | string, expireAt: string) => request<void>(`/tenants/${tenantId}/renew`, { method: 'PATCH', data: JSON.stringify(expireAt), headers: { 'Content-Type': 'application/json' } }),
     login: (data: AuthLoginRequest) => request<AuthSession>('/auth/login', { method: 'POST', data }),
     joinByInvite: (data: AuthJoinRequest) => request<AuthJoinResult>('/auth/join', { method: 'POST', data }),
     takeover: (data: AuthTakeoverRequest) => request<AuthSession>('/auth/takeover', { method: 'POST', data }),
@@ -141,6 +163,42 @@ export function createApi(adapter: RequestAdapter) {
     createPlatformCustomer: (data: PlatformCustomerRequest) => request<PlatformCustomer>('/platform/customer', { method: 'POST', data }),
     updatePlatformCustomer: (customerId: number | string, data: PlatformCustomerRequest) => request<PlatformCustomer>(`/platform/customer/${customerId}`, { method: 'PUT', data }),
     deletePlatformCustomer: (customerId: number | string) => request<void>(`/platform/customer/${customerId}`, { method: 'DELETE' }),
+
+    // ===== 管理端运营模块（文档：Admin Dashboard/Assets/Compliance/ContentPackages/Exports/Members/Stores/Styles） =====
+    // 1. 数据看板
+    getAdminDashboardOverview: () => request<DashboardOverview>('/admin/dashboard/overview'),
+    getAdminDashboardTrend: () => request<DashboardTrendPoint[]>('/admin/dashboard/trend'),
+    // 2. 素材管理
+    getAdminAssets: () => request<AssetAdminItem[]>('/admin/assets/'),
+    reviewAdminAsset: (id: number | string, data: ReviewAssetRequest) => request<void>(`/admin/assets/${id}/review`, { method: 'PUT', data }),
+    // 3. 合规管理
+    getComplianceWords: () => request<ComplianceWord[]>('/admin/compliance/words'),
+    upsertComplianceWord: (data: UpsertComplianceWordRequest) => request<void>('/admin/compliance/words', { method: 'PUT', data }),
+    disableComplianceWord: (id: number | string) => request<void>(`/admin/compliance/words/${id}`, { method: 'DELETE' }),
+    getAuditConfig: (orgId: number | string) => request<AuditConfig>(`/admin/compliance/audit-config/${orgId}`),
+    updateAuditConfig: (orgId: number | string, data: UpdateAuditConfigRequest) => request<void>(`/admin/compliance/audit-config/${orgId}`, { method: 'PUT', data }),
+    // 4. 内容包管理
+    getContentPackages: () => request<ContentPackage[]>('/admin/content-packages/'),
+    createContentPackage: (data: CreateContentPackageRequest) => request<void>('/admin/content-packages/', { method: 'POST', data }),
+    disableContentPackage: (id: number | string) => request<void>(`/admin/content-packages/${id}`, { method: 'DELETE' }),
+    // 5. 导出任务
+    createExportTask: (data: CreateExportRequest) => request<void>('/admin/exports/', { method: 'POST', data }),
+    getExportTasks: () => request<ExportTask[]>('/admin/exports/'),
+    getExportTask: (id: number | string) => request<ExportTask>(`/admin/exports/${id}`),
+    // 6. 会员管理（PageResult<UserAccount>，Query: orgId?/pageNo/pageSize）
+    getAdminMembers: (params: AdminMemberListQuery = {}) => {
+      const query = Object.entries(params).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
+      return request<PageResult<UserAccount>>(`/admin/members/${query ? `?${query}` : ''}`);
+    },
+    // 7. 门店管理
+    getStoreSummaries: () => request<StoreAccountSummary[]>('/admin/stores/'),
+    createStore: (data: CreateStoreRequest) => request<void>('/admin/stores/', { method: 'POST', data }),
+    updateStoreParent: (storeId: number | string, data: UpdateStoreParentRequest) => request<void>(`/admin/stores/${storeId}/parent`, { method: 'PATCH', data }),
+    // 8. 风格管理
+    getStyleOptions: () => request<StyleOption[]>('/admin/styles/'),
+    createStyle: (data: CreateStyleRequest) => request<void>('/admin/styles/', { method: 'POST', data }),
+    updateStyle: (id: number | string, data: UpdateStyleRequest) => request<void>(`/admin/styles/${id}`, { method: 'PUT', data }),
+    deleteStyle: (id: number | string) => request<void>(`/admin/styles/${id}`, { method: 'DELETE' }),
   };
 }
 

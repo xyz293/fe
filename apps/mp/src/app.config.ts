@@ -10,6 +10,7 @@ export default {
     'pages/work-detail/index',
     'pages/messages/index',
     'pages/mine/index',
+    'pages/quota-flow/index',
     'pages/badges/index',
     'pages/ranking/index',
   ],

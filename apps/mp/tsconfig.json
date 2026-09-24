@@ -5,7 +5,8 @@
     "moduleResolution": "Node",
     "baseUrl": ".",
     "paths": {
-      "@xiaoa/share/types": ["../../share/src/api/types.ts"]
+      "@xiaoa/share/types": ["../../share/src/api/types.ts"],
+      "@xiaoa/share/constants": ["../../share/src/constants/index.ts"]
     },
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,

@@ -9,6 +9,8 @@
     ".": "./src/index.ts",
     "./api": "./src/api/index.ts",
     "./types": "./src/api/types.ts",
+    "./constants": "./src/constants/index.ts",
+    "./quota-api": "./src/api/quota.ts",
     "./components": "./src/components/index.ts"
   },
   "scripts": {

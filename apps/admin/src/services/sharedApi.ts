@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { message } from 'antd';
-import { createApi, createTracker, type RequestAdapter, type RequestOptions } from '@xiaoa/share';
+import { createApi, createQuotaApi, createTracker, type RequestAdapter, type RequestOptions } from '@xiaoa/share';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
@@ -46,4 +46,6 @@ const axiosAdapter: RequestAdapter = {
 };
 
 export const sharedApi = createApi(axiosAdapter);
+/** 额度计费域接口：算力总池 / 流水 / 分配 / 平台收款 */
+export const quotaApi = createQuotaApi(axiosAdapter);
 export const track = createTracker(axiosAdapter);

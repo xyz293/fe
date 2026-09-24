@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro';
+import type { MyQuota, QuotaFlow, QuotaFlowQuery } from '@xiaoa/share';
 import type { AsyncTask, AdminTaskReport, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
 
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'http://localhost:8080/api';
@@ -32,12 +33,30 @@ async function request<T>(url: string, options: RequestOptions = {}) {
 
 export const taroRequestAdapter = { request };
 
+/**
+ * 额度计费域接口（小程序端薄封装，仅包含 C 端需要的两个接口）。
+ * 类型从 @xiaoa/share/types 引入，字段与《额度计费域-后端方案》对齐；
+ * 管理端完整封装见 share/src/api/quota.ts 的 createQuotaApi。
+ */
+export const quotaApi = {
+  /** GET /api/quota/my 我的额度（余额 + 近 10 条流水） */
+  getMyQuota: () => request<MyQuota>('/quota/my'),
+  /** GET /api/quota/my/flows 我的额度流水分页 */
+  getMyQuotaFlows: (params: QuotaFlowQuery = {}) => {
+    const pairs = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
+    const query = pairs.length ? `?${pairs.map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}` : '';
+    return request<PageResult<QuotaFlow>>(`/quota/my/flows${query}`);
+  },
+};
+
 export const sharedApi = {
   request,
   health: () => request<{ status: string }>('/health'),
   getUser: () => request<User>('/user'),
   openTenant: (data: TenantOpenRequest) => request<TenantOpenResult>('/tenants/open', { method: 'POST', data }),
   getTenant: (tenantId: number | string) => request<TenantDetail>(`/tenants/${tenantId}`),
+  // 文档 §7.3：PATCH /api/tenants/{tenantId}/renew，请求体为 JSON 字符串（如 "2027-09-23 23:59:59"），仅 HQ_ADMIN
+  renewTenant: (tenantId: number | string, expireAt: string) => request<void>(`/tenants/${tenantId}/renew`, { method: 'PATCH', data: JSON.stringify(expireAt) }),
   login: (data: AuthLoginRequest) => request<AuthSession>('/auth/login', { method: 'POST', data }),
   joinByInvite: (data: AuthJoinRequest) => request<AuthJoinResult>('/auth/join', { method: 'POST', data }),
   takeover: (data: AuthTakeoverRequest) => request<AuthSession>('/auth/takeover', { method: 'POST', data }),

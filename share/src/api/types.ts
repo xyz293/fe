@@ -656,3 +656,197 @@ export interface PlatformCustomerRequest {
   phone: string;
   remark?: string;
 }
+
+// ===== 管理端运营模块（数据看板/素材/合规/内容包/导出/会员/门店/风格） =====
+// 注：后端文档仅提供接口与 DTO 名称，字段按语义建模，均为宽松可选，展示层需兜底。
+
+// ---- 1. 数据看板 /api/admin/dashboard ----
+
+export interface DashboardOverview {
+  tenantCount?: number;
+  activeTenantCount?: number;
+  storeCount?: number;
+  memberCount?: number;
+  workCount?: number;
+  publishedWorkCount?: number;
+  assetCount?: number;
+  pendingAssetCount?: number;
+  quotaUsed?: number;
+  quotaTotal?: number;
+}
+
+export interface DashboardTrendPoint {
+  date: string;
+  workCount?: number;
+  publishCount?: number;
+  activeMemberCount?: number;
+  quotaUsed?: number;
+}
+
+// ---- 2. 素材管理 /api/admin/assets ----
+
+export interface AssetAdminItem {
+  id: LongId;
+  tenantId?: LongId;
+  orgId?: LongId;
+  orgName?: string;
+  title?: string;
+  type?: string;
+  url?: string;
+  coverUrl?: string;
+  uploaderName?: string;
+  reviewStatus?: string;
+  reviewReason?: string;
+  tags?: string[];
+  createdAt?: string;
+  reviewedAt?: string;
+}
+
+export interface ReviewAssetRequest {
+  approved: boolean;
+  reason?: string;
+}
+
+// ---- 3. 合规管理 /api/admin/compliance ----
+
+export interface ComplianceWord {
+  id: LongId;
+  word: string;
+  level?: string;
+  category?: string;
+  replacement?: string;
+  enabled?: number | boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UpsertComplianceWordRequest {
+  id?: LongId;
+  word: string;
+  level?: string;
+  category?: string;
+  replacement?: string;
+}
+
+export interface AuditConfig {
+  orgId: LongId;
+  autoReview?: boolean;
+  sensitiveFilter?: boolean;
+  proofRequired?: boolean;
+  updatedAt?: string;
+}
+
+export interface UpdateAuditConfigRequest {
+  autoReview?: boolean;
+  sensitiveFilter?: boolean;
+  proofRequired?: boolean;
+}
+
+// ---- 4. 内容包管理 /api/admin/content-packages ----
+
+export interface ContentPackage {
+  id: LongId;
+  name: string;
+  description?: string;
+  scene?: string;
+  assetCount?: number;
+  status?: number | string;
+  startAt?: string;
+  endAt?: string;
+  createdAt?: string;
+}
+
+export interface CreateContentPackageRequest {
+  name: string;
+  description?: string;
+  scene?: string;
+  assetIds?: LongId[];
+  startAt?: string;
+  endAt?: string;
+}
+
+// ---- 5. 导出任务 /api/admin/exports ----
+
+export interface CreateExportRequest {
+  type: string;
+  dateFrom?: string;
+  dateTo?: string;
+  orgId?: LongId;
+}
+
+export interface ExportTask {
+  id: LongId;
+  type?: string;
+  status?: string;
+  fileUrl?: string;
+  rowCount?: number;
+  createdAt?: string;
+  finishedAt?: string;
+}
+
+// ---- 6. 会员管理 /api/admin/members（对应租户模块 UserAccount 模型） ----
+
+export interface UserAccount {
+  id: LongId;
+  phone?: string;
+  openid?: string;
+  nickname?: string;
+  status?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminMemberListQuery {
+  orgId?: number | string;
+  pageNo?: number;
+  pageSize?: number;
+}
+
+// ---- 7. 门店管理 /api/admin/stores ----
+
+export interface StoreAccountSummary {
+  storeId: LongId;
+  storeName: string;
+  parentId?: LongId;
+  parentName?: string;
+  memberCount?: number;
+  workCount?: number;
+  status?: number;
+  createdAt?: string;
+}
+
+export interface CreateStoreRequest {
+  name: string;
+  parentId?: LongId;
+  address?: string;
+  contactPhone?: string;
+}
+
+export interface UpdateStoreParentRequest {
+  parentId: LongId;
+}
+
+// ---- 8. 风格管理 /api/admin/styles ----
+
+export interface StyleOption {
+  id: LongId;
+  name: string;
+  description?: string;
+  prompt?: string;
+  enabled?: number | boolean;
+  sortOrder?: number;
+}
+
+export interface CreateStyleRequest {
+  name: string;
+  description?: string;
+  prompt?: string;
+  sortOrder?: number;
+}
+
+export interface UpdateStyleRequest {
+  name?: string;
+  description?: string;
+  prompt?: string;
+  sortOrder?: number;
+}
