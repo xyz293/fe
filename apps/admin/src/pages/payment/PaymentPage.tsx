@@ -1,7 +1,7 @@
 import { Alert, Button, Select, Space, Typography, message } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import type { PaymentOrder, PaymentStatus } from '@xiaoa/share/types';
+import type { PaymentOrder, PaymentStatus } from '@xiaoa/share';
 import { quotaApi } from '../../services/sharedApi';
 import { OrderTable, confirmSettle, confirmVoid } from './OrderTable';
 import { RegisterModal } from './RegisterModal';

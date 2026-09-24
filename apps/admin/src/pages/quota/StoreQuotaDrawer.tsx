@@ -1,6 +1,6 @@
 import { Alert, Card, Drawer, Space, Statistic, Typography } from 'antd';
 import { useEffect, useState } from 'react';
-import type { OrgNode, QuotaAccount } from '@xiaoa/share/types';
+import type { OrgNode, QuotaAccount } from '@xiaoa/share';
 import { formatQuota } from '@xiaoa/share/constants';
 import { quotaApi } from '../../services/sharedApi';
 import { FlowTable } from './FlowTable';

@@ -204,6 +204,8 @@ export interface CreationStyleOption {
   name: string;
   code?: string;
   description?: string;
+  /** 热门风格（创作页🔥角标） */
+  hot?: number | boolean;
 }
 
 export interface CreationPlatformOption {
@@ -226,6 +228,8 @@ export interface GenerateWorkRequest {
   styleId: LongId;
   platform: string;
   userInput: string;
+  /** 产品名（创作页独立输入，可与描述拼接） */
+  productName?: string;
   refAssetIds: LongId[];
 }
 
@@ -293,16 +297,77 @@ export interface GenerationTaskQuery {
   endDate?: string;
 }
 
+/** 发布状态（对齐后端 publish_status，《创作与作品域-后端方案》） */
+export type PublishStatus = 'NONE' | 'DRAFT' | 'PENDING_AUDIT' | 'APPROVED' | 'REJECTED' | 'PUBLISHED';
+
 export interface Work {
   id: string;
   title: string;
   coverUrl?: string;
   contentUrl?: string;
   type: 'COPY' | 'IMAGE' | 'VIDEO';
-  status: 0 | 1 | 2 | 3 | 4 | 5 | 'DRAFT' | 'PENDING_REVIEW' | 'READY' | 'REJECTED';
+  /** publish_status：数字或新旧字符串枚举，前端用 normalizePublishStatus 归一化后查 PUBLISH_STATUS */
+  status: 0 | 1 | 2 | 3 | 4 | 5 | 'DRAFT' | 'PENDING_REVIEW' | 'READY' | 'REJECTED' | PublishStatus;
   summary?: string;
+  /** 配套文案（发布复制/编辑用，等价于后端 caption） */
+  caption?: string;
+  /** 目标发布平台 */
+  platform?: string;
+  /** 最近一条 REJECT 的审核意见 */
+  rejectOpinion?: string;
   rejectReason?: string;
   failureReason?: string;
+}
+
+// ---- 创作与作品域 · 内容审核 /api/admin/audit/works ----
+
+export interface AuditWorkItem {
+  id: LongId;
+  title?: string;
+  coverUrl?: string;
+  contentUrl?: string;
+  type?: 'COPY' | 'IMAGE' | 'VIDEO';
+  /** 待审文案 */
+  caption?: string;
+  summary?: string;
+  submitterName?: string;
+  storeName?: string;
+  submittedAt?: string;
+  status?: PublishStatus | string;
+}
+
+export interface AuditWorkQuery {
+  status?: string;
+  pageNo?: number;
+  pageSize?: number;
+}
+
+export interface RejectWorkRequest {
+  /** 驳回意见（必填，字数上限 200） */
+  opinion: string;
+}
+
+// ---- 创作与作品域 · 素材 /api/assets ----
+
+export interface AssetItem {
+  id: LongId;
+  url?: string;
+  coverUrl?: string;
+  title?: string;
+  /** 品牌图库 / 本店图库 */
+  scope?: 'BRAND' | 'STORE' | string;
+  createdAt?: string;
+}
+
+export interface AssetQuery {
+  scope?: 'BRAND' | 'STORE' | string;
+  pageNo?: number;
+  pageSize?: number;
+}
+
+export interface AssetUploadResult {
+  id: LongId;
+  url: string;
 }
 
 export interface PublishRecord {
@@ -310,6 +375,11 @@ export interface PublishRecord {
   taskId?: LongId;
   platform: string;
   proofUrl?: string;
+}
+
+/** 改稿重提：修改 caption 后后端自动回 PENDING_AUDIT */
+export interface UpdateWorkCaptionRequest {
+  caption: string;
 }
 
 export type TaskFormType = 1 | 2;

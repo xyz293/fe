@@ -1,7 +1,7 @@
 import { Alert, Button, Card, Col, Row, Space, Statistic, Typography } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import type { QuotaAccount, QuotaTrendPoint } from '@xiaoa/share/types';
+import type { QuotaAccount, QuotaTrendPoint } from '@xiaoa/share';
 import { formatQuota } from '@xiaoa/share/constants';
 import { quotaApi } from '../../services/sharedApi';
 import { AllocateModal } from './AllocateModal';

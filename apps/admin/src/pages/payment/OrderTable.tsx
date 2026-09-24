@@ -1,5 +1,5 @@
 import { Button, Modal, Table, Tag } from 'antd';
-import type { PaymentOrder } from '@xiaoa/share/types';
+import type { PaymentOrder } from '@xiaoa/share';
 import { PAYMENT_STATUS_MAP } from '@xiaoa/share/constants';
 
 export interface OrderTableProps {

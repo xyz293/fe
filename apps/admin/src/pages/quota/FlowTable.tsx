@@ -2,7 +2,7 @@ import { DatePicker, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { useEffect, useState } from 'react';
-import type { QuotaFlow, QuotaFlowBizType, QuotaFlowQuery } from '@xiaoa/share/types';
+import type { QuotaFlow, QuotaFlowBizType, QuotaFlowQuery } from '@xiaoa/share';
 import { FLOW_TYPE_MAP, formatQuota, quotaAmountTone } from '@xiaoa/share/constants';
 import { quotaApi } from '../../services/sharedApi';
 
