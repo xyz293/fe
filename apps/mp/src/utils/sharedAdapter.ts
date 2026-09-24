@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro';
 import type { MyQuota, QuotaFlow, QuotaFlowQuery } from '@xiaoa/share';
-import type { AsyncTask, AdminTaskReport, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
+import type { AdminTaskReport, AssetItem, AssetQuery, AssetUploadResult, AsyncTask, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
 
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -100,6 +100,39 @@ export const sharedApi = {
   getCreationConfig: () => request<CreationConfig>('/creation/config'),
   generate: (data: GenerateWorkRequest) => request<GenerateResult>('/work/generate', { method: 'POST', data }),
   getWorkStatus: (workId: number | string) => request<WorkStatusResponse>(`/work/${workId}/status`),
+  // ===== 创作与作品域（《创作与作品域-后端方案》，管理端完整封装见 share/src/api/work.ts） =====
+  /** PUT /api/work/{id}/caption 修改配套文案（驳回改稿重提后后端自动回 PENDING_AUDIT） */
+  updateWorkCaption: (workId: LongId, caption: string) => request<void>(`/work/${workId}/caption`, { method: 'PUT', data: { caption } }),
+  /** POST /api/work/{id}/regenerate 重新生成（全价扣费，前端二次确认） */
+  regenerateWork: (workId: LongId) => request<GenerateResult>(`/work/${workId}/regenerate`, { method: 'POST' }),
+  /** GET /api/assets 素材库列表（scope=BRAND 品牌图库 / STORE 本店图库，后端三层可见性合并返回） */
+  getAssets: (params: AssetQuery = {}) => {
+    const pairs = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
+    const query = pairs.length ? `?${pairs.map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}` : '';
+    return request<AssetItem[]>(`/assets${query}`);
+  },
+  /** POST /api/assets/recommend 本店素材推优入库（重复推优由后端拒绝，前端直接 toast 错误信息） */
+  recommendAsset: (assetId: LongId) => request<void>('/assets/recommend', { method: 'POST', data: { assetId } }),
+  /** POST /api/assets 从相册上传素材（即传即用） */
+  uploadAsset: (filePath: string) => new Promise<AssetUploadResult>((resolve, reject) => {
+    const token = Taro.getStorageSync('token') as string;
+    Taro.uploadFile({
+      url: `${API_BASE_URL}/assets`,
+      filePath,
+      name: 'file',
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      success: (res) => {
+        try {
+          const result = JSON.parse(res.data) as { code: number; msg?: string; data?: AssetUploadResult };
+          if (result.code === 0 && result.data) resolve(result.data);
+          else reject(new Error(result.msg || '素材上传失败'));
+        } catch {
+          reject(new Error('素材上传失败'));
+        }
+      },
+      fail: () => reject(new Error('素材上传失败，请重试')),
+    });
+  }),
   getAsyncTask: (taskId: string) => request<AsyncTask>(`/task/${taskId}`),
   getPromptTemplates: () => Promise.reject(new Error('当前端不支持该接口')),
   createPromptTemplate: () => Promise.reject(new Error('当前端不支持该接口')),

@@ -1,28 +1,13 @@
-import { Button, Card, Drawer, Form, Image, Input, Modal, Popconfirm, Space, Table, Tag, Typography, message } from 'antd';
+import { Button, Card, Drawer, Form, Input, Popconfirm, Space, Table, Tag, Typography, message } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import type { AssetAdminItem, ContentPackage, CreateContentPackageRequest, CreateStyleRequest, ReviewAssetRequest, StyleOption, UpdateStyleRequest } from '@xiaoa/share/types';
+import type { ContentPackage, CreateContentPackageRequest, CreateStyleRequest, StyleOption, UpdateStyleRequest } from '@xiaoa/share/types';
 import { sharedApi } from '../services/sharedApi';
 
 interface PageProps { title: string; description: string; }
-const statusColors: Record<string, string> = { PENDING: 'gold', APPROVED: 'green', REJECTED: 'red' };
-const statusLabels: Record<string, string> = { PENDING: '待审核', APPROVED: '已通过', REJECTED: '已驳回' };
 function formatDate(value?: string | null) { return value ? new Date(value).toLocaleString('zh-CN') : '-'; }
 function PageHeading({ title, description, action }: PageProps & { action?: React.ReactNode }) { return <div className="page-heading"><div className="page-heading-copy"><Typography.Title level={2}>{title}</Typography.Title><Typography.Text>{description}</Typography.Text></div><div className="page-actions">{action}</div></div>; }
 function useError() { const [error, setError] = useState(''); return { error, catchError: (e: unknown, fallback: string) => setError(e instanceof Error ? e.message : fallback) }; }
-
-// ===== 素材审核 =====
-function AssetReviewModal({ asset, open, onClose, onSuccess }: { asset: AssetAdminItem | null; open: boolean; onClose: () => void; onSuccess: () => void }) {
-  const [form] = Form.useForm<{ approved: boolean; reason?: string }>(); const [loading, setLoading] = useState(false);
-  useEffect(() => { if (open) form.resetFields(); }, [open, form]);
-  const submit = async () => { try { const values = await form.validateFields(); setLoading(true); await sharedApi.reviewAdminAsset(asset!.id, values as ReviewAssetRequest); message.success(values.approved ? '已通过审核' : '已驳回素材'); onClose(); onSuccess(); } catch (e) { if (e instanceof Error) message.error(e.message); } finally { setLoading(false); } };
-  return <Modal title="素材审核" open={open} onCancel={onClose} footer={null} destroyOnClose>{asset && <Space direction="vertical" size={16} className="full-width"><div className="asset-preview">{asset.coverUrl ? <Image width={160} src={asset.coverUrl} /> : <Typography.Text type="secondary">无预览图</Typography.Text>}</div><Typography.Text>标题：{asset.title || '-'}</Typography.Text><Typography.Text>类型：{asset.type || '-'}</Typography.Text><Typography.Text>上传人：{asset.uploaderName || '-'}</Typography.Text><Form form={form} layout="vertical"><Form.Item name="approved" label="审核结果" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="reason" label="备注/原因"><Input.TextArea rows={3} /></Form.Item></Form><div className="modal-actions"><Button onClick={onClose}>取消</Button><Button type="primary" loading={loading} onClick={submit}>提交</Button></div></Space>}</Modal>;
-}
-export function AssetAdminPage({ title, description }: PageProps) {
-  const [assets, setAssets] = useState<AssetAdminItem[]>([]); const [loading, setLoading] = useState(false); const [selected, setSelected] = useState<AssetAdminItem | null>(null); const [open, setOpen] = useState(false); const { error, catchError } = useError();
-  const load = () => { setLoading(true); sharedApi.getAdminAssets().then(setAssets).catch((e) => catchError(e, '素材列表加载失败')).finally(() => setLoading(false)); }; useEffect(load, []);
-  return <Space direction="vertical" size={20} className="full-width"><PageHeading title={title} description={description} action={<Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>} />{error && <Typography.Text type="danger">{error}</Typography.Text>}<Card><Table loading={loading} rowKey={(r) => String(r.id)} dataSource={assets} pagination={{ pageSize: 10 }} columns={[{ title: '预览', dataIndex: 'coverUrl', render: (v) => v ? <Image width={56} src={v} /> : '-' }, { title: '标题', dataIndex: 'title' }, { title: '类型', dataIndex: 'type' }, { title: '组织', dataIndex: 'orgName', render: (v) => v || '-' }, { title: '上传人', dataIndex: 'uploaderName' }, { title: '状态', dataIndex: 'reviewStatus', render: (v) => { const k = String(v); return <Tag color={statusColors[k] || 'default'}>{statusLabels[k] || k || '-'}</Tag>; } }, { title: '上传时间', dataIndex: 'createdAt', render: formatDate }, { title: '操作', render: (_, a) => <Button type="link" onClick={() => { setSelected(a); setOpen(true); }}>审核</Button> }]} /></Card><AssetReviewModal asset={selected} open={open} onClose={() => setOpen(false)} onSuccess={load} /></Space>;
-}
 
 // ===== 内容包管理 =====
 function PackageDrawer({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {

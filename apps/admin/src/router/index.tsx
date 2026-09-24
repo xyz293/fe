@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { AccountBookOutlined, BgColorsOutlined, BellOutlined, CheckSquareOutlined, CloudServerOutlined, DashboardOutlined, DollarOutlined, ExportOutlined, FileTextOutlined, PictureOutlined, SafetyOutlined, SettingOutlined, ShopOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons';
+import { AccountBookOutlined, AuditOutlined, BgColorsOutlined, BellOutlined, CalendarOutlined, CheckSquareOutlined, CloudServerOutlined, DashboardOutlined, DollarOutlined, ExportOutlined, FileTextOutlined, PictureOutlined, SafetyOutlined, SettingOutlined, ShopOutlined, TeamOutlined, WalletOutlined } from '@ant-design/icons';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { CrudPage } from '../pages/CrudPage';
 import { DashboardPage } from '../pages/DashboardPage';
@@ -11,7 +11,10 @@ import { TaskBoardPage } from '../pages/TaskBoardPage';
 import { TaskReportPage } from '../pages/TaskReportPage';
 import { TaskModifyLogsPage } from '../pages/TaskModifyLogsPage';
 import { TaskRemindPage } from '../pages/TaskRemindPage';
-import { AssetAdminPage, ContentPackagePage, StyleAdminPage } from '../pages/AdminContentPages';
+import { ContentPackagePage, StyleAdminPage } from '../pages/AdminContentPages';
+import { AssetCenterPage } from '../pages/asset/AssetCenterPage';
+import { CalendarPage } from '../pages/calendar/CalendarPage';
+import { AuditQueuePage } from '../pages/audit/AuditQueuePage';
 import { ComplianceAdminPage } from '../pages/AdminCompliancePage';
 import { MemberAdminPage, StoreAdminPage } from '../pages/AdminOrgPages';
 import { ExportAdminPage, OperationDashboardPage } from '../pages/AdminOpsPages';
@@ -28,7 +31,9 @@ export const adminMenus: AdminMenuItem[] = [
   { key: '/admin/stores', icon: <ShopOutlined />, label: '门店管理' },
   { key: '/admin/members', icon: <TeamOutlined />, label: '会员管理' },
   { key: '/admin/tenant-workspace', icon: <TeamOutlined />, label: '租户 · 组织与成员' },
-  { key: '/admin/materials', icon: <PictureOutlined />, label: '素材审核' },
+  { key: '/admin/asset', icon: <PictureOutlined />, label: '素材中心' },
+  { key: '/admin/calendar', icon: <CalendarOutlined />, label: '营销日历' },
+  { key: '/admin/audit', icon: <AuditOutlined />, label: '内容审核' },
   { key: '/admin/content-packages', icon: <FileTextOutlined />, label: '内容包管理' },
   { key: '/admin/styles', icon: <BgColorsOutlined />, label: '风格库' },
   { key: '/admin/tasks', icon: <CheckSquareOutlined />, label: '任务管理' },
@@ -54,7 +59,9 @@ export const pageConfig: Record<string, PageConfig> = {
   '/admin/stores': { title: '门店管理', description: '查询门店汇总、创建门店并调整上级组织。', columns: ['门店名称', '上级门店', '成员数', '作品数', '状态', '操作'] },
   '/admin/members': { title: '会员管理', description: '按组织分页查询会员账号。', columns: ['昵称', '手机号', 'OpenID', '状态', '注册时间'] },
   '/admin/tenant-workspace': { title: '组织与成员', description: '按租户组织树管理门店节点、成员关系和账号角色。', columns: [] },
-  '/admin/materials': { title: '素材审核', description: '审核门店上传的素材，通过或驳回。', columns: ['预览', '标题', '类型', '组织', '上传人', '状态', '操作'] },
+  '/admin/asset': { title: '素材中心', description: '品牌素材、推优待审与行业资产包统一管理，支持分类、上传与推优审核。', columns: [] },
+  '/admin/calendar': { title: '营销日历', description: '按营销节点管理内容包：日历标记、侧抽屉查看与撤销。', columns: [] },
+  '/admin/audit': { title: '内容审核', description: '审核待发布的作品，通过或驳回并填写意见；数据范围由角色决定。', columns: [] },
   '/admin/content-packages': { title: '内容包管理', description: '创建、停用营销节点内容包。', columns: ['名称', '场景', '素材数', '状态', '周期', '操作'] },
   '/admin/styles': { title: '风格库', description: '维护轻奢、婚庆、国风等行业内容风格表达。', columns: ['风格名称', '适用场景', 'Prompt', '排序', '状态', '操作'] },
   '/admin/exports': { title: '导出任务', description: '创建数据导出任务并查看进度与下载链接。', columns: ['任务ID', '类型', '状态', '行数', '创建时间', '操作'] },
@@ -83,7 +90,10 @@ export function AppRoutes() {
       <Route path="/admin/operation" element={<OperationDashboardPage {...pageConfig['/admin/operation']} />} />
       <Route path="/admin/stores" element={<StoreAdminPage {...pageConfig['/admin/stores']} />} />
       <Route path="/admin/members" element={<MemberAdminPage {...pageConfig['/admin/members']} />} />
-      <Route path="/admin/materials" element={<AssetAdminPage {...pageConfig['/admin/materials']} />} />
+      <Route path="/admin/asset" element={<AssetCenterPage {...pageConfig['/admin/asset']} />} />
+      <Route path="/admin/calendar" element={<CalendarPage {...pageConfig['/admin/calendar']} />} />
+      <Route path="/admin/materials" element={<Navigate to="/admin/asset" replace />} />
+      <Route path="/admin/audit" element={<AuditQueuePage {...pageConfig['/admin/audit']} />} />
       <Route path="/admin/content-packages" element={<ContentPackagePage {...pageConfig['/admin/content-packages']} />} />
       <Route path="/admin/styles" element={<StyleAdminPage {...pageConfig['/admin/styles']} />} />
       <Route path="/admin/exports" element={<ExportAdminPage {...pageConfig['/admin/exports']} />} />
@@ -102,7 +112,7 @@ export function AppRoutes() {
       <Route path="/platform/recharges" element={<PlatformRechargesPage {...pageConfig['/platform/recharges']} />} />
       <Route path="/platform/payment" element={<PaymentPage />} />
       <Route path="/platform/customers" element={<PlatformCustomersPage {...pageConfig['/platform/customers']} />} />
-      {Object.entries(pageConfig).filter(([path]) => !path.startsWith('/platform/') && !['/admin/tenant-workspace', '/admin/task-board', '/admin/task-report', '/admin/task-remind', '/admin/task-modify-logs', '/admin/operation', '/admin/stores', '/admin/members', '/admin/materials', '/admin/content-packages', '/admin/styles', '/admin/exports', '/admin/compliance', '/admin/quota'].includes(path)).map(([path, config]) => <Route key={path} path={path} element={<CrudPage {...config} />} />)}
+      {Object.entries(pageConfig).filter(([path]) => !path.startsWith('/platform/') && !['/admin/tenant-workspace', '/admin/task-board', '/admin/task-report', '/admin/task-remind', '/admin/task-modify-logs', '/admin/operation', '/admin/stores', '/admin/members', '/admin/asset', '/admin/calendar', '/admin/audit', '/admin/content-packages', '/admin/styles', '/admin/exports', '/admin/compliance', '/admin/quota'].includes(path)).map(([path, config]) => <Route key={path} path={path} element={<CrudPage {...config} />} />)}
     </Routes>
   );
 }

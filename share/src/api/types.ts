@@ -347,20 +347,34 @@ export interface RejectWorkRequest {
   opinion: string;
 }
 
-// ---- 创作与作品域 · 素材 /api/assets ----
+// ---- 资产配置域 · 素材 /api/assets（创作域素材选择器与管理端素材中心共用） ----
+
+export type AssetScope = 'PLATFORM' | 'BRAND' | 'STORE';
+export type AssetStatus = 'APPROVED' | 'PENDING_REVIEW' | 'REJECTED' | 'DELETED';
 
 export interface AssetItem {
   id: LongId;
   url?: string;
   coverUrl?: string;
   title?: string;
-  /** 品牌图库 / 本店图库 */
-  scope?: 'BRAND' | 'STORE' | string;
+  type?: string;
+  /** 可见性：PLATFORM 行业资产包 / BRAND 品牌素材 / STORE 本店素材 */
+  scope?: AssetScope | string;
+  category?: string;
+  categoryId?: LongId;
+  reviewStatus?: AssetStatus | string;
+  reviewReason?: string;
+  uploaderName?: string;
+  fileSize?: number;
+  recommendedBy?: string;
+  recommendedAt?: string;
   createdAt?: string;
 }
 
 export interface AssetQuery {
-  scope?: 'BRAND' | 'STORE' | string;
+  scope?: AssetScope | string;
+  category?: string;
+  status?: AssetStatus | string;
   pageNo?: number;
   pageSize?: number;
 }
@@ -368,6 +382,41 @@ export interface AssetQuery {
 export interface AssetUploadResult {
   id: LongId;
   url: string;
+}
+
+export interface UpdateAssetRequest {
+  title?: string;
+  categoryId?: LongId;
+  category?: string;
+}
+
+/** 推优（小程序本店素材 → 总部品牌素材） */
+export interface RecommendAssetRequest {
+  assetId: LongId;
+}
+
+/** 推优审核：通过可顺带改分类（scope 升 BRAND 出现在品牌素材 Tab） */
+export interface AssetReviewRequest {
+  pass: boolean;
+  categoryId?: LongId;
+  category?: string;
+  opinion?: string;
+}
+
+export interface AssetCategory {
+  id: LongId;
+  name: string;
+  sortOrder?: number;
+  assetCount?: number;
+}
+
+export interface CreateAssetCategoryRequest {
+  name: string;
+  sortOrder?: number;
+}
+
+export interface RenameAssetCategoryRequest {
+  name: string;
 }
 
 export interface PublishRecord {
@@ -812,7 +861,22 @@ export interface UpdateAuditConfigRequest {
   proofRequired?: boolean;
 }
 
-// ---- 4. 内容包管理 /api/admin/content-packages ----
+// ---- 4. 资产配置域 · 内容包（营销日历）/api/admin/content-packages ----
+
+export type PackageStatus = 'ACTIVE' | 'EXPIRED' | 'CANCELED';
+/** 任务模板动作类型：1 固定动作 / 2 指定内容 */
+export type PackageActionType = 1 | 2;
+/** 任务模板频率：1 每日 / 2 每周 / 3 每月 */
+export type PackageFrequency = 1 | 2 | 3;
+
+export interface PackageTaskTemplate {
+  actionType?: PackageActionType;
+  platform?: string;
+  frequency?: PackageFrequency;
+  /** 1 直接完成 / 2 需截图凭证 */
+  judgeType?: TaskJudgeType;
+  endTime?: string;
+}
 
 export interface ContentPackage {
   id: LongId;
@@ -820,9 +884,15 @@ export interface ContentPackage {
   description?: string;
   scene?: string;
   assetCount?: number;
-  status?: number | string;
+  /** ACTIVE 待下发 / EXPIRED 已下发 / CANCELED 已撤销 */
+  status?: number | string | PackageStatus;
   startAt?: string;
   endAt?: string;
+  /** 营销节点日期 YYYY-MM-DD（日历标记） */
+  marketingDate?: string;
+  /** 下发时刻 HH:mm */
+  publishTime?: string;
+  taskTemplate?: PackageTaskTemplate;
   createdAt?: string;
 }
 
@@ -833,6 +903,16 @@ export interface CreateContentPackageRequest {
   assetIds?: LongId[];
   startAt?: string;
   endAt?: string;
+  marketingDate?: string;
+  publishTime?: string;
+  taskTemplate?: PackageTaskTemplate;
+}
+
+export interface ContentPackageQuery {
+  /** 月份 YYYY-MM（营销日历按月拉取） */
+  month?: string;
+  pageNo?: number;
+  pageSize?: number;
 }
 
 // ---- 5. 导出任务 /api/admin/exports ----

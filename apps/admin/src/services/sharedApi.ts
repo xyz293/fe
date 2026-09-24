@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { message } from 'antd';
-import { createApi, createQuotaApi, createTracker, type RequestAdapter, type RequestOptions } from '@xiaoa/share';
+import { createApi, createAssetApi, createContentPackageApi, createQuotaApi, createTracker, createWorkApi, type RequestAdapter, type RequestOptions } from '@xiaoa/share';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
@@ -48,4 +48,10 @@ const axiosAdapter: RequestAdapter = {
 export const sharedApi = createApi(axiosAdapter);
 /** 额度计费域接口：算力总池 / 流水 / 分配 / 平台收款 */
 export const quotaApi = createQuotaApi(axiosAdapter);
+/** 创作与作品域接口：审核队列 / 文案改稿 / 重新生成（详见 share/src/api/work.ts） */
+export const workApi = createWorkApi(axiosAdapter);
+/** 资产配置域接口：素材中心三 Tab / 分类 / 上传 / 推优审核（详见 share/src/api/asset.ts） */
+export const assetApi = createAssetApi(axiosAdapter);
+/** 资产配置域接口：营销日历内容包（详见 share/src/api/contentPackage.ts） */
+export const packageApi = createContentPackageApi(axiosAdapter);
 export const track = createTracker(axiosAdapter);
