@@ -1,4 +1,4 @@
-import { Button, Form, InputNumber, Modal, Space, TreeSelect, Typography, message } from 'antd';
+import { Button, Form, Input, InputNumber, Modal, Space, TreeSelect, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import type { OrgNode } from '@xiaoa/share/types';
 import { formatQuota } from '@xiaoa/share/constants';
@@ -13,7 +13,7 @@ export interface AllocateModalProps {
   onSuccess: () => void;
 }
 
-interface AllocateFormValues { storeId: string; amount: number; }
+interface AllocateFormValues { storeId: string; amount: number; remark?: string; }
 
 function genIdemKey() {
   const cryptoRef = globalThis.crypto as Crypto | undefined;
@@ -32,20 +32,19 @@ function toStoreTreeData(nodes: OrgNode[]): Array<{ value: string; title: string
 }
 
 /**
- * 分配额度到门店弹窗。
- * 防重三板斧（前端侧）：提交即 loading 禁用按钮；idemKey 随弹窗打开生成、提交不变；
- * 失败/超时弹"是否重试"用同一个 idemKey 重发（后端幂等兜底，不会双扣）。
+ * 分配额度到门店弹窗（POST /api/admin/quota/allocate，文档 §2.4.2，仅 HQ_ADMIN）。
+ * 幂等（文档注意事项 §4.1）：bizId 随弹窗打开生成、重试复用同一 key（后端实际落库为 {bizId}:out / {bizId}:in 两条，不会双扣）。
  */
 export function AllocateModal({ open, balance, onClose, onSuccess }: AllocateModalProps) {
   const [form] = Form.useForm<AllocateFormValues>();
-  const [idemKey, setIdemKey] = useState('');
+  const [bizId, setBizId] = useState('');
   const [storeTree, setStoreTree] = useState<Array<ReturnType<typeof toStoreTreeData>[number]>>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // 每次打开弹窗生成新的 idemKey（不随提交变化），并加载组织树门店
+  // 每次打开弹窗生成新的幂等键（不随提交变化），并加载组织树门店
   useEffect(() => {
     if (!open) return;
-    setIdemKey(genIdemKey());
+    setBizId(genIdemKey());
     form.resetFields();
     sharedApi.getOrgTree().then((tree) => setStoreTree(toStoreTreeData(tree))).catch(() => setStoreTree([]));
   }, [open, form]);
@@ -53,7 +52,7 @@ export function AllocateModal({ open, balance, onClose, onSuccess }: AllocateMod
   const submit = async (key: string, values: AllocateFormValues) => {
     setSubmitting(true);
     try {
-      await quotaApi.allocateQuota({ storeId: values.storeId, amount: values.amount, idemKey: key });
+      await quotaApi.allocateQuota({ storeId: values.storeId, amount: values.amount, bizId: key, remark: values.remark });
       message.success(`已向门店分配 ${formatQuota(values.amount)} 额度`);
       onSuccess();
       onClose();
@@ -72,8 +71,8 @@ export function AllocateModal({ open, balance, onClose, onSuccess }: AllocateMod
   };
 
   const handleFinish = (values: AllocateFormValues) => {
-    // 提交使用打开弹窗时生成的 idemKey；重试路径也复用同一个 key
-    void submit(idemKey || genIdemKey(), values);
+    // 提交使用打开弹窗时生成的幂等键；重试路径也复用同一个 key
+    void submit(bizId || genIdemKey(), values);
   };
 
   return (
@@ -93,6 +92,9 @@ export function AllocateModal({ open, balance, onClose, onSuccess }: AllocateMod
           ]}
         >
           <InputNumber className="full-input" min={1} max={balance > 0 ? Math.floor(balance) : 1} precision={0} placeholder="例如：500" />
+        </Form.Item>
+        <Form.Item name="remark" label="备注（选填）">
+          <Input maxLength={100} placeholder="如 10 月门店营销预算" />
         </Form.Item>
         <Space direction="vertical" size={8} className="full-width">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>提交即锁定，网络超时可凭同一幂等键重试，不会双扣。</Typography.Text>

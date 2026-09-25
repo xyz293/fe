@@ -347,76 +347,60 @@ export interface RejectWorkRequest {
   opinion: string;
 }
 
-// ---- 资产配置域 · 素材 /api/assets（创作域素材选择器与管理端素材中心共用） ----
+// ---- 资产配置域 · 素材 /api/assets（《额度计费域 & 资产配置域·前端接口文档》§3.3.5 对齐） ----
 
 export type AssetScope = 'PLATFORM' | 'BRAND' | 'STORE';
 export type AssetStatus = 'APPROVED' | 'PENDING_REVIEW' | 'REJECTED' | 'DELETED';
+export type AssetType = 'IMAGE' | 'VIDEO' | 'SCRIPT';
 
 export interface AssetItem {
   id: LongId;
-  url?: string;
-  coverUrl?: string;
-  title?: string;
-  type?: string;
-  /** 可见性：PLATFORM 行业资产包 / BRAND 品牌素材 / STORE 本店素材 */
-  scope?: AssetScope | string;
-  category?: string;
-  categoryId?: LongId;
-  reviewStatus?: AssetStatus | string;
-  reviewReason?: string;
-  uploaderName?: string;
-  fileSize?: number;
-  recommendedBy?: string;
-  recommendedAt?: string;
+  tenantId?: LongId;
+  /** 关联行业包（平台素材才有） */
+  packageId?: LongId | null;
+  /** 所属门店（STORE 层素材才有） */
+  storeId?: LongId | null;
+  scope: AssetScope | string;
+  type: AssetType | string;
+  name: string;
+  /** 文件地址（当前 local:// 占位协议，不可直接当 http URL 加载）或话术内容 */
+  content: string;
+  /** 版本号，一期固定 v1 */
+  version?: string;
+  category?: string | null;
+  status: AssetStatus | string;
+  /** 上传人用户 ID（驳回通知发给 TA） */
+  uploaderId?: LongId;
+  /** 旧推优字段，仅历史兼容，新流程忽略 */
+  recommendStatus?: number;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AssetQuery {
   scope?: AssetScope | string;
-  category?: string;
   status?: AssetStatus | string;
+  category?: string;
   pageNo?: number;
   pageSize?: number;
 }
 
-export interface AssetUploadResult {
-  id: LongId;
-  url: string;
-}
-
+/** PUT /api/admin/assets/{id}：name（≤128）/ category（≤50）至少传一个，只更新传了的 */
 export interface UpdateAssetRequest {
-  title?: string;
-  categoryId?: LongId;
+  name?: string;
   category?: string;
 }
 
-/** 推优（小程序本店素材 → 总部品牌素材） */
+/** 推优（小程序本店素材 → 总部审核） */
 export interface RecommendAssetRequest {
   assetId: LongId;
 }
 
-/** 推优审核：通过可顺带改分类（scope 升 BRAND 出现在品牌素材 Tab） */
+/** 推优审核（文档 §3.4.5）：仅 PENDING_REVIEW 可审；pass=true 时 scope: STORE→BRAND、status→APPROVED */
 export interface AssetReviewRequest {
   pass: boolean;
-  categoryId?: LongId;
+  /** 通过时可改分类升入品牌层；不传保持原分类 */
   category?: string;
-  opinion?: string;
-}
-
-export interface AssetCategory {
-  id: LongId;
-  name: string;
-  sortOrder?: number;
-  assetCount?: number;
-}
-
-export interface CreateAssetCategoryRequest {
-  name: string;
-  sortOrder?: number;
-}
-
-export interface RenameAssetCategoryRequest {
-  name: string;
 }
 
 export interface PublishRecord {
@@ -611,7 +595,6 @@ export interface Badge {
 export type PlatformPeriod = 'month' | 'week' | 'year';
 export type PlatformTenantStatus = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'DISABLED' | 0 | 1 | 2 | 3;
 export type PlatformPlanStatus = 'ACTIVE' | 'INACTIVE' | 0 | 1;
-export type PlatformRechargeStatus = 'PENDING' | 'CONFIRMED' | 'VOIDED' | 0 | 1 | 2;
 
 export interface PlatformTrendPoint {
   date: string;
@@ -717,38 +700,6 @@ export interface PlatformPlanRequest {
   description?: string;
 }
 
-export interface PlatformRechargeOrder {
-  id: LongId;
-  orderNo: string;
-  tenantId: LongId;
-  tenantName: string;
-  amount: number;
-  proofUrl?: string;
-  status: PlatformRechargeStatus;
-  submitterName?: string;
-  submittedAt?: string;
-  confirmedAt?: string;
-  voidReason?: string;
-  currentBalance?: number;
-  balanceAfter?: number;
-}
-
-export interface PlatformRechargeListQuery {
-  pageNo?: number;
-  pageSize?: number;
-  status?: PlatformRechargeStatus;
-  keyword?: string;
-}
-
-export interface PlatformRechargeConfirmRequest {
-  rechargeId: LongId;
-}
-
-export interface PlatformRechargeVoidRequest {
-  rechargeId: LongId;
-  reason: string;
-}
-
 export interface PlatformCustomer {
   id: LongId;
   tenantId: LongId;
@@ -802,29 +753,7 @@ export interface DashboardTrendPoint {
   quotaUsed?: number;
 }
 
-// ---- 2. 素材管理 /api/admin/assets ----
-
-export interface AssetAdminItem {
-  id: LongId;
-  tenantId?: LongId;
-  orgId?: LongId;
-  orgName?: string;
-  title?: string;
-  type?: string;
-  url?: string;
-  coverUrl?: string;
-  uploaderName?: string;
-  reviewStatus?: string;
-  reviewReason?: string;
-  tags?: string[];
-  createdAt?: string;
-  reviewedAt?: string;
-}
-
-export interface ReviewAssetRequest {
-  approved: boolean;
-  reason?: string;
-}
+// ---- 2. 素材管理 /api/admin/assets（文档 §3.4，类型见 AssetItem / AssetReviewRequest） ----
 
 // ---- 3. 合规管理 /api/admin/compliance ----
 
@@ -861,56 +790,67 @@ export interface UpdateAuditConfigRequest {
   proofRequired?: boolean;
 }
 
-// ---- 4. 资产配置域 · 内容包（营销日历）/api/admin/content-packages ----
+// ---- 4. 资产配置域 · 内容包（营销日历定时下发任务，文档 §3.5）/api/admin/content-packages ----
 
-export type PackageStatus = 'ACTIVE' | 'EXPIRED' | 'CANCELED';
+/** 内容包状态：1 ACTIVE 待下发 / 2 DISPATCHED 已下发 / 3 CANCELED 已撤销（文档 §3.5.2） */
+export type PackageStatus = 1 | 2 | 3;
 /** 任务模板动作类型：1 固定动作 / 2 指定内容 */
 export type PackageActionType = 1 | 2;
 /** 任务模板频率：1 每日 / 2 每周 / 3 每月 */
 export type PackageFrequency = 1 | 2 | 3;
 
+/** 任务模板（文档 §3.5.1，创建时强校验；targetScope≠1 时 targetIds 必传且非空） */
 export interface PackageTaskTemplate {
-  actionType?: PackageActionType;
-  platform?: string;
-  frequency?: PackageFrequency;
+  /** 任务标题，缺省用内容包名称 */
+  title?: string;
+  actionType: PackageActionType;
+  /** 平台（如 douyin，非空字符串） */
+  platform: string;
+  frequency: PackageFrequency;
   /** 1 直接完成 / 2 需截图凭证 */
-  judgeType?: TaskJudgeType;
-  endTime?: string;
+  judgeType: TaskJudgeType;
+  /** 任务截止 yyyy-MM-dd HH:mm:ss（注意空格分隔，文档 §1.3 例外） */
+  endTime: string;
+  /** 1 全员（缺省）/ 2 区域 / 3 门店 / 4 员工 */
+  targetScope?: TaskTargetScope;
+  targetIds?: number[];
 }
 
 export interface ContentPackage {
   id: LongId;
+  tenantId?: LongId;
   name: string;
-  description?: string;
-  scene?: string;
-  assetCount?: number;
-  /** ACTIVE 待下发 / EXPIRED 已下发 / CANCELED 已撤销 */
-  status?: number | string | PackageStatus;
-  startAt?: string;
-  endAt?: string;
-  /** 营销节点日期 YYYY-MM-DD（日历标记） */
-  marketingDate?: string;
-  /** 下发时刻 HH:mm */
-  publishTime?: string;
-  taskTemplate?: PackageTaskTemplate;
+  /** 营销日 yyyy-MM-dd，早于今天创建直接拒绝（1001） */
+  calendarDate: string;
+  /** 下发时刻 ISO yyyy-MM-ddTHH:mm:ss */
+  publishAt: string;
+  /** 推广方向（≤2000），会随任务带给门店 */
+  copyDirection?: string | null;
+  /** 任务模板 JSON 字符串（前端需 JSON.parse 后渲染） */
+  taskTemplate: string;
+  status: PackageStatus;
+  /** 下发生成的任务 ID（未下发为 null；status=2 且为空说明下发异常，需人工补建） */
+  sourceTaskId?: LongId | null;
+  /** 下发失败原因 */
+  lastError?: string | null;
+  createdBy?: LongId;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateContentPackageRequest {
+  /** 内容包名称（≤128） */
   name: string;
-  description?: string;
-  scene?: string;
-  assetIds?: LongId[];
-  startAt?: string;
-  endAt?: string;
-  marketingDate?: string;
-  publishTime?: string;
-  taskTemplate?: PackageTaskTemplate;
+  /** 营销日 yyyy-MM-dd */
+  calendarDate: string;
+  /** 下发时刻 yyyy-MM-ddTHH:mm:ss */
+  publishAt: string;
+  copyDirection?: string;
+  taskTemplate: PackageTaskTemplate;
 }
 
 export interface ContentPackageQuery {
-  /** 月份 YYYY-MM（营销日历按月拉取） */
-  month?: string;
+  status?: PackageStatus;
   pageNo?: number;
   pageSize?: number;
 }

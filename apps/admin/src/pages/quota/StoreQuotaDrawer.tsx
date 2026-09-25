@@ -11,7 +11,7 @@ export interface StoreQuotaDrawerProps {
   onClose: () => void;
 }
 
-/** 门店额度抽屉：余额卡 + 流水表（含分配记录，可用类型筛选查看） */
+/** 门店额度抽屉（GET /api/admin/quota/store/{storeId}，文档 §2.4.3）：余额卡 + 流水表（门店账户不存在会自动创建，余额 0） */
 export function StoreQuotaDrawer({ store, onClose }: StoreQuotaDrawerProps) {
   const [account, setAccount] = useState<QuotaAccount | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,8 +22,8 @@ export function StoreQuotaDrawer({ store, onClose }: StoreQuotaDrawerProps) {
     setLoading(true);
     setError('');
     setAccount(null);
-    // 传入门店组织 ID，由后端解析为该门店的额度账户
-    quotaApi.getQuotaAccount(store.id)
+    // 传入门店 ID，由后端解析为该门店的额度账户（不存在自动创建）
+    quotaApi.getStoreQuotaAccount(store.id)
       .then(setAccount)
       .catch((requestError) => setError(requestError instanceof Error ? requestError.message : '门店账户加载失败'))
       .finally(() => setLoading(false));
@@ -37,15 +37,15 @@ export function StoreQuotaDrawer({ store, onClose }: StoreQuotaDrawerProps) {
           {account ? (
             <Space size={36} wrap>
               <Statistic title="门店余额" value={account.balance} formatter={(value) => formatQuota(Number(value))} suffix="额度" />
-              <Statistic title="累计总额" value={account.total ?? 0} formatter={(value) => formatQuota(Number(value))} suffix="额度" />
-              <Statistic title="累计消耗" value={account.used ?? 0} formatter={(value) => formatQuota(Number(value))} suffix="额度" />
+              <Statistic title="账户 ID" value={String(account.id)} />
+              <Statistic title="账户级别" value={account.level === 'TENANT' ? '租户池' : '门店账户'} />
             </Space>
           ) : (
             !loading && !error && <Typography.Text type="secondary">该门店暂无额度账户</Typography.Text>
           )}
         </Card>
         <Card title="流水记录（含分配记录）" size="small">
-          <FlowTable accountId={account?.accountId ?? store?.id} />
+          <FlowTable accountId={account?.id} />
         </Card>
       </Space>
     </Drawer>

@@ -31,7 +31,8 @@ export function FlowTable({ accountId, refreshKey = 0 }: FlowTableProps) {
       bizType,
       pageNo,
       pageSize: PAGE_SIZE,
-      ...(range ? { startTime: range[0].format('YYYY-MM-DD 00:00:00'), endTime: range[1].format('YYYY-MM-DD 23:59:59') } : {}),
+      // 文档 §2.4.4：from/to 为 ISO yyyy-MM-ddTHH:mm:ss
+      ...(range ? { from: range[0].format('YYYY-MM-DDT00:00:00'), to: range[1].format('YYYY-MM-DDT23:59:59') } : {}),
     };
     setLoading(true);
     setError('');
@@ -66,7 +67,7 @@ export function FlowTable({ accountId, refreshKey = 0 }: FlowTableProps) {
         columns={[
           { title: '时间', dataIndex: 'createdAt', width: 170, render: (value: QuotaFlow['createdAt']) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-' },
           { title: '类型', dataIndex: 'bizType', width: 90, render: (value: QuotaFlow['bizType']) => { const meta = FLOW_TYPE_MAP[value]; return meta ? <Tag color={meta.color === 'default' ? undefined : meta.color}>{meta.label}</Tag> : value; } },
-          { title: '关联单号', dataIndex: 'refNo', render: (value: QuotaFlow['refNo']) => value || '-' },
+          { title: '业务标识', dataIndex: 'bizId', ellipsis: true, render: (value: QuotaFlow['bizId'], record) => value || record.remark || '-' },
           { title: '变动', dataIndex: 'amount', width: 120, render: (value: number) => { const tone = quotaAmountTone(value); return <Typography.Text type={tone === 'green' ? 'success' : tone === 'red' ? 'danger' : undefined} strong>{formatQuota(value, { signed: true })}</Typography.Text>; } },
           { title: '变动后余额', dataIndex: 'balanceAfter', width: 110, render: (value: QuotaFlow['balanceAfter']) => value === undefined || value === null ? '-' : formatQuota(value) },
         ]}

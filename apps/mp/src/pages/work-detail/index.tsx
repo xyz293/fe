@@ -173,9 +173,9 @@ export default function WorkDetailPage() {
       const res = await Taro.chooseImage({ count: 1 });
       const tempPath = res.tempFilePaths[0];
       setUploadingProof(true);
-      // judgeType=2：截图凭证先传 /api/assets 拿 URL，再随发布记录提交；失败阻断提交
+      // judgeType=2：截图凭证先传 /api/assets 拿地址，再随发布记录提交；失败阻断提交
       const uploaded = await sharedApi.uploadAsset(tempPath);
-      setProofUrl(uploaded.url);
+      setProofUrl(uploaded.content);
       Taro.showToast({ title: '凭证已上传', icon: 'success' });
     } catch (requestError) {
       Taro.showToast({ title: requestError instanceof Error ? requestError.message : '凭证上传失败，请重试', icon: 'none' });

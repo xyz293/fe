@@ -1,6 +1,7 @@
-import { Button, Image, Input, Text, Textarea, View } from '@tarojs/components';
+import { Button, Input, Text, Textarea, View } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
 import { useEffect, useMemo, useState } from 'react';
+import type { AssetItem } from '@xiaoa/share/types';
 import { sharedApi } from '../../utils/sharedAdapter';
 import { track } from '../../services/track';
 import { QUOTA_INSUFFICIENT_CODE, QUOTA_INSUFFICIENT_TIP } from '../../utils/quotaConstants';
@@ -10,7 +11,6 @@ type AIGenerationType = 'IMAGE' | 'VIDEO';
 interface CreationStyle { id: LongId; name: string; hot?: number | boolean; }
 interface CreationConfig { styles: CreationStyle[]; platforms: Array<{ value: string; label: string }>; imagePrice: number; videoPrice: number; quota: { balance: number; total: number; used: number }; auditRequired: boolean; refAssetLimit?: number; }
 interface GenerateWorkRequest { type: AIGenerationType; styleId: LongId; platform: string; userInput: string; productName?: string; refAssetIds: LongId[]; }
-interface AssetItem { id: LongId; url?: string; coverUrl?: string; title?: string; }
 type AssetScope = 'BRAND' | 'STORE';
 
 const CONFIG_CACHE_KEY = 'xiaoa_creation_config';
@@ -31,10 +31,16 @@ function saveCachedConfig(data: CreationConfig) { Taro.setStorageSync(CONFIG_CAC
 function parseRefIds(value?: string) { return value ? value.split(',').map((item) => item.trim()).filter(Boolean) : []; }
 // C 端图库分类（一期硬编码常用分类，后端分类接口就绪后改为拉取）
 const ASSET_CATEGORIES = ['全部', '商品图', '场景图', '模板'];
-function normalizeAssetList(result: unknown): AssetItem[] {
-  if (Array.isArray(result)) return result as AssetItem[];
-  const page = result as { list?: AssetItem[] } | null;
-  return page?.list ?? [];
+
+/**
+ * 按客户端 Tab 分组：GET /api/assets 不支持 scope 参数（文档 §3.3.2，
+ * STAFF/OWNER 返回 PLATFORM ∪ BRAND ∪ STORE 合并列表），scope 在客户端按 item.scope 过滤。
+ */
+function splitByScope(list: AssetItem[]): { brand: AssetItem[]; store: AssetItem[] } {
+  return {
+    brand: list.filter((item) => item.scope !== 'STORE'),
+    store: list.filter((item) => item.scope === 'STORE'),
+  };
 }
 
 export default function ProPage() {
@@ -74,22 +80,24 @@ export default function ProPage() {
 
   const removeAsset = (id: LongId) => setSelectedAssets((current) => current.filter((item) => String(item.id) !== String(id)));
 
-  const loadAssets = (scope: AssetScope, category: string) => {
+  const loadAssets = (category: string) => {
     setLoadingAssets(true);
-    sharedApi.getAssets({ scope, category: category === '全部' ? undefined : category })
-      .then((result) => {
-        const list = normalizeAssetList(result);
-        if (scope === 'BRAND') setBrandAssets(list); else setStoreAssets(list);
+    sharedApi.getAssets({ category: category === '全部' ? undefined : category })
+      .then((list) => {
+        const { brand, store } = splitByScope(list);
+        setBrandAssets(brand);
+        setStoreAssets(store);
       })
       .catch(() => Taro.showToast({ title: '图库加载失败，可稍后重试', icon: 'none' }))
       .finally(() => setLoadingAssets(false));
   };
 
-  const openPicker = () => { setAssetTab('BRAND'); loadAssets('BRAND', assetCategory); setShowPicker(true); };
+  const openPicker = () => { setAssetTab('BRAND'); loadAssets(assetCategory); setShowPicker(true); };
 
-  const switchAssetTab = (scope: AssetScope) => { setAssetTab(scope); loadAssets(scope, assetCategory); };
+  // 切 Tab 仅切换本地分组视图，不重复请求（列表已一次拉回并按 scope 分组）
+  const switchAssetTab = (scope: AssetScope) => setAssetTab(scope);
 
-  const switchAssetCategory = (category: string) => { setAssetCategory(category); loadAssets(assetTab, category); };
+  const switchAssetCategory = (category: string) => { setAssetCategory(category); loadAssets(category); };
 
   // 推优入库：本店图库长按素材 → ActionSheet「推荐入库」→ POST /api/assets/recommend
   const recommendToBrand = (asset: AssetItem) => {
@@ -123,7 +131,7 @@ export default function ProPage() {
         const filePath = paths[index];
         try {
           const uploaded = await sharedApi.uploadAsset(filePath);
-          const asset: AssetItem = { id: uploaded.id, url: uploaded.url, title: '相册上传' };
+          const asset: AssetItem = { ...uploaded, name: uploaded.name || '相册上传' };
           setStoreAssets((current) => [asset, ...current]);
           setSelectedAssets((current) => (current.length >= assetLimit ? current : [...current, asset]));
         } catch {
@@ -190,7 +198,8 @@ export default function ProPage() {
         <View className="asset-grid">
           {selectedAssets.map((asset, index) => (
             <View className="asset-cell" key={String(asset.id)}>
-              {asset.coverUrl || asset.url ? <Image className="asset-thumb" src={(asset.coverUrl || asset.url) as string} mode="aspectFill" /> : <View className="asset-thumb" />}
+              {/* content 当前为 local:// 占位协议（文档 §4.4），不能当 http URL 加载，先渲染占位图 */}
+              <View className="asset-thumb" />
               <Text className="asset-order">{index + 1}</Text>
               <Text className="asset-cell-remove" onClick={() => removeAsset(asset.id)}>×</Text>
             </View>
@@ -237,7 +246,8 @@ export default function ProPage() {
                     onClick={() => toggleAsset(asset)}
                     onLongPress={assetTab === 'STORE' ? () => recommendToBrand(asset) : undefined}
                   >
-                    {asset.coverUrl || asset.url ? <Image className="asset-pick-thumb" src={(asset.coverUrl || asset.url) as string} mode="aspectFill" /> : <View className="asset-pick-thumb" />}
+                    {/* content 当前为 local:// 占位协议（文档 §4.4），不能当 http URL 加载，先渲染占位图 */}
+                    <View className="asset-pick-thumb" />
                     {order >= 0 && <Text className="asset-pick-mark">{order + 1}</Text>}
                   </View>
                 );

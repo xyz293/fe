@@ -1,12 +1,17 @@
-import { Button, Card, Checkbox, Form, Input, Space, Tag, Typography, message } from 'antd';
+import { Button, Card, Checkbox, Form, Input, Space, Tabs, Tag, Typography, message } from 'antd';
 import { ArrowRightOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthLoginRequest } from '@xiaoa/share/types';
-import { sharedApi } from '../services/sharedApi';
+import { quotaApi, sharedApi } from '../services/sharedApi';
 
 interface LoginFormValues extends AuthLoginRequest {
   remember: boolean;
+}
+
+interface PlatformLoginFormValues {
+  loginName: string;
+  credential: string;
 }
 
 function saveSession(session: Awaited<ReturnType<typeof sharedApi.login>>) {
@@ -19,6 +24,18 @@ function saveSession(session: Awaited<ReturnType<typeof sharedApi.login>>) {
   localStorage.setItem('dataScope', String(session.dataScope));
   localStorage.setItem('tenantName', session.tenantName);
   localStorage.setItem('orgName', session.orgName);
+}
+
+/** 平台账号登录（POST /platform/auth/login，文档 §2.3.1）：PLATFORM_OPS / PLATFORM_FINANCE，无租户归属 */
+function savePlatformSession(result: Awaited<ReturnType<typeof quotaApi.platformLogin>>) {
+  localStorage.setItem('token', result.token);
+  localStorage.setItem('userId', String(result.platformUserId));
+  localStorage.setItem('role', result.role);
+  // 平台账号无租户归属（文档 §1.1），清掉企业态避免串数据
+  localStorage.removeItem('tenantId');
+  localStorage.removeItem('orgId');
+  localStorage.removeItem('tenantName');
+  localStorage.removeItem('orgName');
 }
 
 export default function LoginPage() {
@@ -46,5 +63,49 @@ export default function LoginPage() {
     }
   };
 
-  return <div className="login-page"><div className="login-decoration login-decoration-left" /><div className="login-decoration login-decoration-right" /><Card className="login-card" bordered={false}><div className="login-brand"><span className="brand-mark">AI</span><div><Typography.Title level={3}>小AI · 营销平台</Typography.Title><Typography.Text>运营后台</Typography.Text></div></div><div className="login-heading"><Tag icon={<SafetyCertificateOutlined />} color="gold">安全登录</Tag><Typography.Title level={1}>欢迎回来</Typography.Title><Typography.Paragraph>登录后管理租户、组织、成员和 AI 内容生产。</Typography.Paragraph></div>{error && <div className="login-error">{error}</div>}<Form form={form} layout="vertical" onFinish={submit} initialValues={{ openid: localStorage.getItem('openid') || '', remember: Boolean(localStorage.getItem('openid')) }} requiredMark={false}><Form.Item name="openid" label="微信标识 openid" rules={[{ required: true, whitespace: true, message: '请输入 openid' }]} extra="当前后端认证接口直接接收 openid；接入企业 SSO 或微信登录后可替换此输入方式"><Input size="large" placeholder="请输入管理员 openid" autoComplete="username" /></Form.Item><Form.Item name="remember" valuePropName="checked"><Checkbox>记住本次 openid</Checkbox></Form.Item><Button type="primary" htmlType="submit" size="large" block loading={loading} icon={<ArrowRightOutlined />}>进入工作台</Button></Form><Space direction="vertical" size={4} className="login-tip"><Typography.Text type="secondary">平台运营账号进入平台后台</Typography.Text><Typography.Text type="secondary">HQ_ADMIN / REGION_ADMIN / OWNER 进入租户后台</Typography.Text></Space></Card></div>;
+  const submitPlatform = async (values: PlatformLoginFormValues) => {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await quotaApi.platformLogin({ loginName: values.loginName.trim(), credential: values.credential });
+      savePlatformSession(result);
+      message.success('平台登录成功');
+      navigate('/platform/dashboard', { replace: true });
+    } catch (requestError) {
+      // 登录失败（账号不存在/禁用/密码错）后端返回 2001
+      setError(requestError instanceof Error ? requestError.message : '平台登录失败，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const enterpriseForm = (
+    <Form form={form} layout="vertical" onFinish={submit} initialValues={{ openid: localStorage.getItem('openid') || '', remember: Boolean(localStorage.getItem('openid')) }} requiredMark={false}>
+      <Form.Item name="openid" label="微信标识 openid" rules={[{ required: true, whitespace: true, message: '请输入 openid' }]} extra="当前后端认证接口直接接收 openid；接入企业 SSO 或微信登录后可替换此输入方式">
+        <Input size="large" placeholder="请输入管理员 openid" autoComplete="username" />
+      </Form.Item>
+      <Form.Item name="remember" valuePropName="checked"><Checkbox>记住本次 openid</Checkbox></Form.Item>
+      <Button type="primary" htmlType="submit" size="large" block loading={loading} icon={<ArrowRightOutlined />}>进入工作台</Button>
+    </Form>
+  );
+
+  const platformForm = (
+    <Form layout="vertical" onFinish={submitPlatform} requiredMark={false}>
+      <Form.Item name="loginName" label="登录名" rules={[{ required: true, whitespace: true, message: '请输入登录名' }]} extra="开发环境种子账号：platform-ops / platform-finance（密码均为 {登录名}-dev）">
+        <Input size="large" placeholder="如 platform-finance" autoComplete="username" />
+      </Form.Item>
+      <Form.Item name="credential" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
+        <Input.Password size="large" placeholder="请输入密码" autoComplete="current-password" />
+      </Form.Item>
+      <Button type="primary" htmlType="submit" size="large" block loading={loading} icon={<ArrowRightOutlined />}>进入平台后台</Button>
+    </Form>
+  );
+
+  return <div className="login-page"><div className="login-decoration login-decoration-left" /><div className="login-decoration login-decoration-right" /><Card className="login-card" bordered={false}><div className="login-brand"><span className="brand-mark">AI</span><div><Typography.Title level={3}>小AI · 营销平台</Typography.Title><Typography.Text>运营后台</Typography.Text></div></div><div className="login-heading"><Tag icon={<SafetyCertificateOutlined />} color="gold">安全登录</Tag><Typography.Title level={1}>欢迎回来</Typography.Title><Typography.Paragraph>登录后管理租户、组织、成员和 AI 内容生产。</Typography.Paragraph></div>{error && <div className="login-error">{error}</div>}<Tabs
+    defaultActiveKey="enterprise"
+    items={[
+      { key: 'enterprise', label: '企业账号', children: enterpriseForm },
+      { key: 'platform', label: '平台账号', children: platformForm },
+    ]}
+  /><Space direction="vertical" size={4} className="login-tip"><Typography.Text type="secondary">平台运营/财务账号（PLATFORM_OPS / PLATFORM_FINANCE）进入平台后台</Typography.Text><Typography.Text type="secondary">HQ_ADMIN / REGION_ADMIN / OWNER 进入租户后台</Typography.Text></Space></Card></div>;
 }

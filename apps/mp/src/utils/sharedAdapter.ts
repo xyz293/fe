@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro';
-import type { MyQuota, QuotaFlow, QuotaFlowQuery } from '@xiaoa/share';
-import type { AdminTaskReport, AssetItem, AssetQuery, AssetUploadResult, AsyncTask, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
+import type { MyQuota } from '@xiaoa/share';
+import type { AdminTaskReport, AssetItem, AssetQuery, AsyncTask, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
 
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -34,19 +34,13 @@ async function request<T>(url: string, options: RequestOptions = {}) {
 export const taroRequestAdapter = { request };
 
 /**
- * 额度计费域接口（小程序端薄封装，仅包含 C 端需要的两个接口）。
- * 类型从 @xiaoa/share/types 引入，字段与《额度计费域-后端方案》对齐；
+ * 额度计费域接口（小程序端薄封装，仅包含 C 端需要的接口，文档 §2.5）。
+ * 类型从 @xiaoa/share/types 引入，字段与《额度计费域 & 资产配置域·前端接口文档》对齐；
  * 管理端完整封装见 share/src/api/quota.ts 的 createQuotaApi。
  */
 export const quotaApi = {
-  /** GET /api/quota/my 我的额度（余额 + 近 10 条流水） */
+  /** GET /api/quota/my 我的额度（OWNER/STAFF→本店账户；recentFlows 固定最近 10 条流水，不分页） */
   getMyQuota: () => request<MyQuota>('/quota/my'),
-  /** GET /api/quota/my/flows 我的额度流水分页 */
-  getMyQuotaFlows: (params: QuotaFlowQuery = {}) => {
-    const pairs = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
-    const query = pairs.length ? `?${pairs.map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}` : '';
-    return request<PageResult<QuotaFlow>>(`/quota/my/flows${query}`);
-  },
 };
 
 export const sharedApi = {
@@ -105,25 +99,29 @@ export const sharedApi = {
   updateWorkCaption: (workId: LongId, caption: string) => request<void>(`/work/${workId}/caption`, { method: 'PUT', data: { caption } }),
   /** POST /api/work/{id}/regenerate 重新生成（全价扣费，前端二次确认） */
   regenerateWork: (workId: LongId) => request<GenerateResult>(`/work/${workId}/regenerate`, { method: 'POST' }),
-  /** GET /api/assets 素材库列表（scope=BRAND 品牌图库 / STORE 本店图库，后端三层可见性合并返回） */
+  /** GET /api/assets 素材库列表（文档 §3.3.2：仅 category 过滤，返回三层可见性合并的 Asset[]，最多 200 条不分页；scope 在客户端按 item.scope 分组） */
   getAssets: (params: AssetQuery = {}) => {
     const pairs = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
     const query = pairs.length ? `?${pairs.map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}` : '';
     return request<AssetItem[]>(`/assets${query}`);
   },
-  /** POST /api/assets/recommend 本店素材推优入库（重复推优由后端拒绝，前端直接 toast 错误信息） */
+  /** POST /api/assets/recommend 本店素材推优入库（文档 §3.3.3；重复推优由后端拒绝，前端直接 toast 错误信息） */
   recommendAsset: (assetId: LongId) => request<void>('/assets/recommend', { method: 'POST', data: { assetId } }),
-  /** POST /api/assets 从相册上传素材（即传即用） */
-  uploadAsset: (filePath: string) => new Promise<AssetUploadResult>((resolve, reject) => {
+  /** POST /api/assets 从相册上传素材（即传即用，文档 §3.3.1；multipart 字段 file/name/category） */
+  uploadAsset: (filePath: string, options: { name?: string; category?: string } = {}) => new Promise<AssetItem>((resolve, reject) => {
     const token = Taro.getStorageSync('token') as string;
     Taro.uploadFile({
       url: `${API_BASE_URL}/assets`,
       filePath,
       name: 'file',
+      formData: {
+        ...(options.name ? { name: options.name } : {}),
+        ...(options.category ? { category: options.category } : {}),
+      },
       header: token ? { Authorization: `Bearer ${token}` } : {},
       success: (res) => {
         try {
-          const result = JSON.parse(res.data) as { code: number; msg?: string; data?: AssetUploadResult };
+          const result = JSON.parse(res.data) as { code: number; msg?: string; data?: AssetItem };
           if (result.code === 0 && result.data) resolve(result.data);
           else reject(new Error(result.msg || '素材上传失败'));
         } catch {

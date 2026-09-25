@@ -5,7 +5,7 @@
 
 export type AssetScopeKey = 'PLATFORM' | 'BRAND' | 'STORE';
 export type AssetStatusKey = 'APPROVED' | 'PENDING_REVIEW' | 'REJECTED' | 'DELETED';
-export type PackageStatusKey = 'ACTIVE' | 'EXPIRED' | 'CANCELED';
+export type PackageStatusKey = 'ACTIVE' | 'DISPATCHED' | 'CANCELED';
 
 /** 素材可见性文案（Tab 名与 Tag 共用） */
 export const ASSET_SCOPE: Record<AssetScopeKey, string> = {
@@ -28,16 +28,16 @@ export const ASSET_STATUS_COLOR: Record<AssetStatusKey, string> = {
   DELETED: 'default',
 };
 
-/** 内容包状态文案：ACTIVE 待下发（蓝）、EXPIRED 已下发（绿）、CANCELED 已撤销（不展示标记） */
+/** 内容包状态文案（文档 §3.5.2）：1 ACTIVE 待下发（蓝）、2 DISPATCHED 已下发（绿）、3 CANCELED 已撤销（不展示标记） */
 export const PACKAGE_STATUS: Record<PackageStatusKey, string> = {
   ACTIVE: '待下发',
-  EXPIRED: '已下发',
+  DISPATCHED: '已下发',
   CANCELED: '已撤销',
 };
 
 export const PACKAGE_STATUS_COLOR: Record<PackageStatusKey, string> = {
   ACTIVE: 'blue',
-  EXPIRED: 'green',
+  DISPATCHED: 'green',
   CANCELED: 'default',
 };
 
@@ -59,18 +59,18 @@ export function checkAssetFile(file: { name: string; size: number; type?: string
   return null;
 }
 
-/** 内容包状态归一化：数字 1=ACTIVE / 2=EXPIRED / 3=CANCELED，无法识别回 ACTIVE */
+/** 内容包状态归一化：数字/字符串 → ACTIVE / DISPATCHED / CANCELED（文档 §3.5.2 状态机） */
 export function normalizePackageStatus(value: unknown): PackageStatusKey {
   if (typeof value === 'number') {
     if (value === 1) return 'ACTIVE';
-    if (value === 2) return 'EXPIRED';
+    if (value === 2) return 'DISPATCHED';
     if (value === 3) return 'CANCELED';
   }
   if (typeof value === 'string') {
     const upper = value.toUpperCase();
-    if (upper === 'ACTIVE' || upper === '1') return 'ACTIVE';
-    if (upper === 'EXPIRED' || upper === '2') return 'EXPIRED';
-    if (upper === 'CANCELED' || upper === '3') return 'CANCELED';
+    if (upper === '1' || upper === 'ACTIVE') return 'ACTIVE';
+    if (upper === '2' || upper === 'DISPATCHED' || upper === 'EXPIRED') return 'DISPATCHED';
+    if (upper === '3' || upper === 'CANCELED') return 'CANCELED';
   }
   return 'ACTIVE';
 }

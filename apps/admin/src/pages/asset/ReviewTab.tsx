@@ -1,33 +1,32 @@
-import { Button, Empty, Image, Input, Modal, Select, Space, Spin, Typography } from 'antd';
+import { Button, Empty, Input, Modal, Space, Spin, Typography } from 'antd';
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import { useState } from 'react';
-import type { AssetCategory, AssetItem } from '@xiaoa/share/types';
+import type { AssetItem } from '@xiaoa/share/types';
 
 interface ReviewTabProps {
   assets: AssetItem[];
   loading: boolean;
-  categories: AssetCategory[];
   leavingIds: string[];
-  onApprove: (asset: AssetItem, categoryId?: string) => Promise<void>;
-  onReject: (asset: AssetItem, opinion?: string) => Promise<void>;
+  /** 通过（可选改分类升入品牌层）/ 驳回（驳回后后端给上传人发站内信 ASSET_RECOMMEND） */
+  onApprove: (asset: AssetItem, category?: string) => Promise<void>;
+  onReject: (asset: AssetItem) => Promise<void>;
 }
 
 function formatTime(value?: string | null) { return value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'; }
 
-/** 推优待审 Tab：通过（可选改分类，scope 升 BRAND）/ 驳回（意见选填），卡片淡出 */
-export function ReviewTab({ assets, loading, categories, leavingIds, onApprove, onReject }: ReviewTabProps) {
+/** 推优待审 Tab（文档 §3.4.5）：仅 PENDING_REVIEW 可审；通过 scope: STORE→BRAND，卡片淡出 */
+export function ReviewTab({ assets, loading, leavingIds, onApprove, onReject }: ReviewTabProps) {
   const [approving, setApproving] = useState<AssetItem | null>(null);
-  const [approveCategory, setApproveCategory] = useState<string | undefined>();
+  const [approveCategory, setApproveCategory] = useState('');
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [rejecting, setRejecting] = useState<AssetItem | null>(null);
-  const [rejectOpinion, setRejectOpinion] = useState('');
 
   const submitApprove = async () => {
     setConfirmLoading(true);
     try {
-      await onApprove(approving!, approveCategory);
+      await onApprove(approving!, approveCategory.trim() || undefined);
       setApproving(null);
-      setApproveCategory(undefined);
+      setApproveCategory('');
     } finally {
       setConfirmLoading(false);
     }
@@ -36,9 +35,8 @@ export function ReviewTab({ assets, loading, categories, leavingIds, onApprove, 
   const submitReject = async () => {
     setConfirmLoading(true);
     try {
-      await onReject(rejecting!, rejectOpinion.trim() || undefined);
+      await onReject(rejecting!);
       setRejecting(null);
-      setRejectOpinion('');
     } finally {
       setConfirmLoading(false);
     }
@@ -60,23 +58,21 @@ export function ReviewTab({ assets, loading, categories, leavingIds, onApprove, 
                 opacity: leaving ? 0.15 : 1, transition: 'opacity 0.35s ease',
               }}
             >
-              {item.coverUrl ? (
-                <Image src={item.coverUrl} alt={item.title || '素材'} width={88} height={88} style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 88, height: 88, borderRadius: 8, background: '#f5f5f5', flexShrink: 0 }}>🖼</div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 88, height: 88, borderRadius: 8, background: '#f5f5f5', flexShrink: 0, fontSize: 32 }}>
+                {item.type === 'VIDEO' ? '🎬' : item.type === 'SCRIPT' ? '📝' : '🖼'}
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <Typography.Text strong>{item.title || '未命名素材'}</Typography.Text>
+                <Typography.Text strong>{item.name || '未命名素材'}</Typography.Text>
                 <div style={{ marginTop: 4 }}>
                   <Typography.Text type="secondary">
-                    推荐人：{item.recommendedBy || item.uploaderName || '匿名'} · {formatTime(item.recommendedAt || item.createdAt)}
+                    上传人 ID：{item.uploaderId ?? '-'} · {formatTime(item.createdAt)}
                   </Typography.Text>
                 </div>
                 {item.category && <Typography.Text type="secondary" style={{ fontSize: 12 }}>分类：{item.category}</Typography.Text>}
               </div>
               <Space>
-                <Button type="primary" icon={<CheckOutlined />} disabled={leaving} onClick={() => { setApproveCategory(undefined); setApproving(item); }}>通过</Button>
-                <Button danger icon={<CloseOutlined />} disabled={leaving} onClick={() => { setRejectOpinion(''); setRejecting(item); }}>驳回</Button>
+                <Button type="primary" icon={<CheckOutlined />} disabled={leaving} onClick={() => { setApproveCategory(''); setApproving(item); }}>通过</Button>
+                <Button danger icon={<CloseOutlined />} disabled={leaving} onClick={() => setRejecting(item)}>驳回</Button>
               </Space>
             </div>
           );
@@ -89,20 +85,14 @@ export function ReviewTab({ assets, loading, categories, leavingIds, onApprove, 
         onCancel={() => setApproving(null)}
         onOk={submitApprove}
         confirmLoading={confirmLoading}
-        okText="确认通过"
-        destroyOnClose
+        okText="通过"
       >
-        <Typography.Paragraph type="secondary">
-          通过后素材进入「品牌素材」Tab（scope 升 BRAND），全部门店可见。
-        </Typography.Paragraph>
-        <Select
-          placeholder="保持原分类（可选改分类）"
-          style={{ width: '100%' }}
-          allowClear
-          value={approveCategory}
-          onChange={setApproveCategory}
-          options={categories.map((item) => ({ value: String(item.id), label: item.name }))}
-        />
+        {approving && (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            <Typography.Text>通过后素材 scope: STORE→BRAND、status→APPROVED，全租户可见。</Typography.Text>
+            <Input addonBefore="分类" maxLength={50} value={approveCategory} onChange={(event) => setApproveCategory(event.target.value)} placeholder="可不传，保持原分类" />
+          </Space>
+        )}
       </Modal>
 
       <Modal
@@ -111,18 +101,12 @@ export function ReviewTab({ assets, loading, categories, leavingIds, onApprove, 
         onCancel={() => setRejecting(null)}
         onOk={submitReject}
         confirmLoading={confirmLoading}
-        okText="确认驳回"
+        okText="驳回"
         okButtonProps={{ danger: true }}
-        destroyOnClose
       >
-        <Typography.Paragraph type="secondary">意见选填，将展示给推荐人。</Typography.Paragraph>
-        <Input.TextArea
-          rows={3}
-          maxLength={200}
-          placeholder="驳回原因（选填）"
-          value={rejectOpinion}
-          onChange={(event) => setRejectOpinion(event.target.value)}
-        />
+        <Typography.Text>
+          驳回后素材 status→REJECTED（终态：不可见、不可再推优，需重新上传），并给上传人发送站内信「素材推优被驳回」。
+        </Typography.Text>
       </Modal>
     </>
   );

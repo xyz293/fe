@@ -1,7 +1,6 @@
 import type {
   AdminMemberListQuery,
   AdminTaskReport,
-  AssetAdminItem,
   AsyncTask,
   AuthJoinRequest,
   AuthJoinResult,
@@ -15,6 +14,7 @@ import type {
   ChatResult,
   ComplianceWord,
   ContentPackage,
+  ContentPackageQuery,
   CreateContentPackageRequest,
   CreateExportRequest,
   CreateInviteRequest,
@@ -35,7 +35,6 @@ import type {
   PromptTemplateQuery,
   PromptTemplateRequest,
   PublishRecord,
-  ReviewAssetRequest,
   StoreAccountSummary,
   StyleOption,
   UpdateAuditConfigRequest,
@@ -57,10 +56,6 @@ import type {
   PlatformPeriod,
   PlatformPlan,
   PlatformPlanRequest,
-  PlatformRechargeConfirmRequest,
-  PlatformRechargeListQuery,
-  PlatformRechargeOrder,
-  PlatformRechargeVoidRequest,
   PlatformTenant,
   PlatformTenantApproveRequest,
   PlatformTenantListQuery,
@@ -155,10 +150,6 @@ export function createApi(adapter: RequestAdapter) {
     createPlatformPlan: (data: PlatformPlanRequest) => request<PlatformPlan>('/platform/plan', { method: 'POST', data }),
     updatePlatformPlan: (planId: number | string, data: PlatformPlanRequest) => request<PlatformPlan>(`/platform/plan/${planId}`, { method: 'PUT', data }),
     updatePlatformPlanStatus: (planId: number | string, status: 'ACTIVE' | 'INACTIVE' | 0 | 1) => request<PlatformPlan>(`/platform/plan/${planId}/status`, { method: 'PATCH', data: { status } }),
-    getPlatformRecharges: (params: PlatformRechargeListQuery = {}) => request<PageResult<PlatformRechargeOrder>>('/platform/recharge/list', { data: params }),
-    getPlatformRechargeBalance: (rechargeId: number | string) => request<{ currentBalance: number; balanceAfter: number }>(`/platform/recharge/${rechargeId}/balance`),
-    confirmPlatformRecharge: (data: PlatformRechargeConfirmRequest) => request<PlatformRechargeOrder>('/platform/recharge/confirm', { method: 'POST', data }),
-    voidPlatformRecharge: (data: PlatformRechargeVoidRequest) => request<PlatformRechargeOrder>('/platform/recharge/void', { method: 'POST', data }),
     getPlatformCustomers: (params: PlatformCustomerListQuery = {}) => request<PageResult<PlatformCustomer>>('/platform/customer/list', { data: params }),
     createPlatformCustomer: (data: PlatformCustomerRequest) => request<PlatformCustomer>('/platform/customer', { method: 'POST', data }),
     updatePlatformCustomer: (customerId: number | string, data: PlatformCustomerRequest) => request<PlatformCustomer>(`/platform/customer/${customerId}`, { method: 'PUT', data }),
@@ -168,18 +159,16 @@ export function createApi(adapter: RequestAdapter) {
     // 1. 数据看板
     getAdminDashboardOverview: () => request<DashboardOverview>('/admin/dashboard/overview'),
     getAdminDashboardTrend: () => request<DashboardTrendPoint[]>('/admin/dashboard/trend'),
-    // 2. 素材管理
-    getAdminAssets: () => request<AssetAdminItem[]>('/admin/assets/'),
-    reviewAdminAsset: (id: number | string, data: ReviewAssetRequest) => request<void>(`/admin/assets/${id}/review`, { method: 'PUT', data }),
+    // 2. 素材管理（文档 §3.4：分页列表/推优审核由 assetApi 提供，见 share/src/api/asset.ts）
     // 3. 合规管理
     getComplianceWords: () => request<ComplianceWord[]>('/admin/compliance/words'),
     upsertComplianceWord: (data: UpsertComplianceWordRequest) => request<void>('/admin/compliance/words', { method: 'PUT', data }),
     disableComplianceWord: (id: number | string) => request<void>(`/admin/compliance/words/${id}`, { method: 'DELETE' }),
     getAuditConfig: (orgId: number | string) => request<AuditConfig>(`/admin/compliance/audit-config/${orgId}`),
     updateAuditConfig: (orgId: number | string, data: UpdateAuditConfigRequest) => request<void>(`/admin/compliance/audit-config/${orgId}`, { method: 'PUT', data }),
-    // 4. 内容包管理
-    getContentPackages: () => request<ContentPackage[]>('/admin/content-packages/'),
-    createContentPackage: (data: CreateContentPackageRequest) => request<void>('/admin/content-packages/', { method: 'POST', data }),
+    // 4. 内容包管理（文档 §3.5：任务模板在创建时强校验，下发由后端定时任务完成）
+    getContentPackages: (params: ContentPackageQuery = {}) => request<PageResult<ContentPackage>>('/admin/content-packages', { data: params }),
+    createContentPackage: (data: CreateContentPackageRequest) => request<ContentPackage>('/admin/content-packages', { method: 'POST', data }),
     disableContentPackage: (id: number | string) => request<void>(`/admin/content-packages/${id}`, { method: 'DELETE' }),
     // 5. 导出任务
     createExportTask: (data: CreateExportRequest) => request<void>('/admin/exports/', { method: 'POST', data }),
