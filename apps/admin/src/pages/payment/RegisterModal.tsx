@@ -1,6 +1,7 @@
 import { Button, Form, Input, InputNumber, Modal, Select, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
-import type { PaymentOrder, PlatformTenant } from '@xiaoa/share/types';
+import type { PlatformTenant } from '@xiaoa/share/types';
+import type { PaymentOrder } from '@xiaoa/share';
 import { quotaApi, sharedApi } from '../../services/sharedApi';
 
 export interface RegisterModalProps {

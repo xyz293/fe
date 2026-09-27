@@ -1,17 +1,24 @@
 import { Button, Input, Text, Textarea, View } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
 import { useEffect, useMemo, useState } from 'react';
-import type { AssetItem } from '@xiaoa/share/types';
+import type { AssetItem, GenerateWorkRequest } from '@xiaoa/share/types';
 import { sharedApi } from '../../utils/sharedAdapter';
 import { track } from '../../services/track';
 import { QUOTA_INSUFFICIENT_CODE, QUOTA_INSUFFICIENT_TIP } from '../../utils/quotaConstants';
+import { isAsrSupported, startAsr, stopAsr } from '../../utils/asr';
+
+/** 「去配图」从对话模式带入的预填文案与关联会话 ID（与 pages/chat 的存储 key 一致） */
+const CHAT_DESC_KEY = 'xiaoa_chat_link_desc';
+const CHAT_SESSION_KEY = 'xiaoa_chat_session_id';
 
 type LongId = number | string;
 type AIGenerationType = 'IMAGE' | 'VIDEO';
 interface CreationStyle { id: LongId; name: string; hot?: number | boolean; }
 interface CreationConfig { styles: CreationStyle[]; platforms: Array<{ value: string; label: string }>; imagePrice: number; videoPrice: number; quota: { balance: number; total: number; used: number }; auditRequired: boolean; refAssetLimit?: number; }
-interface GenerateWorkRequest { type: AIGenerationType; styleId: LongId; platform: string; userInput: string; productName?: string; refAssetIds: LongId[]; }
+/** 合规拦截错误码（AI 创作域文档 §1.4.1：命中 level=2 合规词直接拒绝，报 4001） */
+const COMPLIANCE_REJECTED_CODE = 4001;
 type AssetScope = 'BRAND' | 'STORE';
+type PickedAsset = Pick<AssetItem, 'id'>;
 
 const CONFIG_CACHE_KEY = 'xiaoa_creation_config';
 const CONFIG_CACHE_TTL = 10 * 60 * 1000;
@@ -49,7 +56,7 @@ export default function ProPage() {
   const [platform, setPlatform] = useState(config.platforms[0]?.value || 'MOMENTS');
   const [productName, setProductName] = useState('');
   const [userInput, setUserInput] = useState('');
-  const [selectedAssets, setSelectedAssets] = useState<AssetItem[]>([]);
+  const [selectedAssets, setSelectedAssets] = useState<PickedAsset[]>([]);
   const [type, setType] = useState<AIGenerationType>('IMAGE');
   const [loading, setLoading] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
@@ -64,11 +71,25 @@ export default function ProPage() {
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
 
+  // 语音听写（专业模式描述输入框：按住说话 → 转文字填入 textarea，用户可改）
+  const [recognizing, setRecognizing] = useState(false);
+  const [voiceSupported] = useState(() => isAsrSupported());
+  // 对话模式带来的关联文案与会话 ID（生成请求透传 chatSessionId，成功后用选定文案回填 caption，文档 §2.6）
+  const [linkedDesc, setLinkedDesc] = useState('');
+  const [linkedSessionId, setLinkedSessionId] = useState<string>('');
+
   useLoad((params) => {
     if (params.type === 'video') setType('VIDEO');
     // 从图库页带入的素材只传 id，这里用占位对象渲染序号角标
     const ids = parseRefIds(params.refAssetIds);
     if (ids.length) setSelectedAssets(ids.map((id) => ({ id })));
+    // 对话模式「去配图」：desc 预填（优先用路由参数，兼容从本地存储取关联文案），同时携带关联会话 ID
+    const linked = params.desc || (params.fromChat ? ((Taro.getStorageSync(CHAT_DESC_KEY) as string) || '') : '');
+    if (linked) {
+      setUserInput(linked);
+      setLinkedDesc(linked);
+    }
+    if (params.fromChat) setLinkedSessionId(String(Taro.getStorageSync(CHAT_SESSION_KEY) || ''));
   });
   useEffect(() => { const cached = readCachedConfig(); if (cached) { setConfig(cached); return; } setLoadingConfig(true); sharedApi.getCreationConfig().then((result) => { setConfig(result); saveCachedConfig(result); setStyleId(result.styles[0]?.id || ''); setPlatform(result.platforms[0]?.value || ''); }).catch((requestError) => setError(requestError instanceof Error ? requestError.message : '创作配置加载失败')).finally(() => setLoadingConfig(false)); }, []);
   useEffect(() => { if (!styleId && config.styles[0]) setStyleId(config.styles[0].id); if (!platform && config.platforms[0]) setPlatform(config.platforms[0].value); }, [config, platform, styleId]);
@@ -145,6 +166,27 @@ export default function ProPage() {
     }
   };
 
+  /** 按住说话：onRecognize 实时上屏，松手后最终文本填入描述框（用户可改再生成） */
+  const onVoiceTouchStart = () => {
+    if (!voiceSupported || loading) return;
+    setRecognizing(true);
+    startAsr({
+      onRecognize: (text) => setUserInput(text),
+      onFinal: (text) => {
+        setRecognizing(false);
+        if (text) setUserInput(text);
+        else Taro.showToast({ title: '没听清，再试一次', icon: 'none' });
+      },
+      onError: (message) => {
+        setRecognizing(false);
+        Taro.showToast({ title: message, icon: 'none' });
+      },
+    });
+  };
+  const onVoiceTouchEnd = () => {
+    if (recognizing) stopAsr();
+  };
+
   const generate = async () => {
     if (!canSubmit) return;
     setLoading(true);
@@ -153,17 +195,27 @@ export default function ProPage() {
       type,
       styleId,
       platform,
-      userInput: userInput.trim(),
+      userInput: userInput.trim() || undefined,
       productName: productName.trim() || undefined,
-      refAssetIds: selectedAssets.map((asset) => asset.id),
+      // 引用素材（文档 §1.4.1：最多 20 个，须三层可见 APPROVED，否则整次生成报 1001）
+      assetIds: selectedAssets.map((asset) => asset.id),
+      // 对话模式「去配图」：关联会话 ID（带它则不再自动生成成套文案，避免覆盖对话产出，文档 §2.6）
+      ...(linkedSessionId ? { chatSessionId: linkedSessionId } : {}),
     };
     const startedAt = Date.now();
     track('create_generate', { type, style: selectedStyle?.name, styleId, platform });
     try {
+      // 生成同步建作品+扣费+提交任务，返回 status=PENDING 的作品（前端去 generating 页轮询）
       const result = await sharedApi.generate(payload);
-      const id = result.workId ?? result.taskId;
+      const id = result?.id;
       if (!id) throw new Error('生成任务创建失败，请稍后重试');
       track('generate_complete', { workId: id, type, success: true, duration: Date.now() - startedAt });
+      // 对话模式「去配图」：把对话选定文案回填为作品配套文案（作品不再自动生成成套文案，文档 §2.6）；尽力而为不阻断跳转
+      if (linkedDesc) {
+        sharedApi.updateWorkCaption(id, linkedDesc).catch(() => {});
+      }
+      // 已进入生成流程，清除对话关联文案，避免下次进入误预填（会话保留，可回对话页继续微调）
+      Taro.removeStorageSync(CHAT_DESC_KEY);
       Taro.navigateTo({ url: `/pages/generating/index?workId=${id}&type=${type}` });
     } catch (requestError) {
       track('generate_complete', { type, success: false, duration: Date.now() - startedAt });
@@ -172,6 +224,9 @@ export default function ProPage() {
       if (isQuotaInsufficient) {
         track('quota_insufficient', { type });
         Taro.showToast({ title: QUOTA_INSUFFICIENT_TIP, icon: 'none' });
+      } else if (code === COMPLIANCE_REJECTED_CODE) {
+        // 4001：描述命中拒绝级合规词，扣费不发生，引导调整文案
+        setError(requestError instanceof Error ? requestError.message : '描述包含违禁词，请调整后重试');
       } else setError(requestError instanceof Error ? requestError.message : '生成失败，请稍后重试');
     } finally {
       setLoading(false);
@@ -181,6 +236,12 @@ export default function ProPage() {
   return (
     <View className="page creation-page">
       <View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">创作</Text><Text className="chat-scene">{config.auditRequired ? '提交审核' : '直接发布'}</Text></View>
+      {/* 创作页顶部模式切换：对话模式在 tabBar 创作页，需 switchTab 返回 */}
+      <View className="creation-type-row" style={{ padding: '0 20px' }}>
+        <Text className="pill" onClick={() => Taro.switchTab({ url: '/pages/chat/index' })}>💬 对话模式</Text>
+        <Text className="pill active">🎛 专业模式</Text>
+      </View>
+      {linkedDesc && <View className="notice-bar"><Text>已带入对话文案：{linkedDesc.slice(0, 30)}{linkedDesc.length > 30 ? '…' : ''}</Text></View>}
       <View className="card creation-card">
         <Text className="section-title" style={{ marginTop: 0 }}>类型</Text>
         <View className="creation-type-row"><Text className={type === 'IMAGE' ? 'pill active' : 'pill'} onClick={() => setType('IMAGE')}>图片</Text><Text className={type === 'VIDEO' ? 'pill active' : 'pill'} onClick={() => setType('VIDEO')}>视频</Text></View>
@@ -213,7 +274,17 @@ export default function ProPage() {
         </View>
         <Text className="section-title">📦 产品名</Text>
         <Input className="prompt-box" value={productName} maxlength={60} placeholder="如：520 对戒、古法黄金手镯" onInput={(event) => setProductName(event.detail.value)} />
-        <Text className="section-title">✍️ 描述 <Text className="muted" style={{ fontSize: '22px' }}>（可选）</Text></Text>
+        <Text className="section-title">✍️ 描述 <Text className="muted" style={{ fontSize: '22px' }}>（可选）</Text>
+          {voiceSupported && (
+            <Text
+              className="voice-button"
+              style={recognizing ? { display: 'inline-flex', marginLeft: '12px', padding: '8px 18px', fontSize: '22px', background: '#f7e3c8' } : { display: 'inline-flex', marginLeft: '12px', padding: '8px 18px', fontSize: '22px' }}
+              onTouchStart={onVoiceTouchStart}
+              onTouchEnd={onVoiceTouchEnd}
+              onTouchCancel={onVoiceTouchEnd}
+            >{recognizing ? '松开识别' : '🎤 按住说话'}</Text>
+          )}
+        </Text>
         <Textarea className="caption-editor-textarea" value={userInput} maxlength={300} placeholder="输入节日、场合和想表达的感觉..." onInput={(event) => setUserInput(event.detail.value)} />
         <View className="creation-cost"><Text>💰 图文 {config.imagePrice} 积分 / 视频 {config.videoPrice} 积分</Text><Text>本店余额：{config.quota.balance.toLocaleString()}</Text></View>
       </View>

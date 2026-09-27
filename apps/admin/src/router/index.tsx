@@ -4,8 +4,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { CrudPage } from '../pages/CrudPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { PlatformDashboardPage } from '../pages/PlatformDashboardPage';
-import { PlatformCustomersPage, PlatformPlansPage, PlatformTenantsPage } from '../pages/PlatformPages';
-import { GenerationTasksPage, PromptTemplatesPage } from '../pages/AiPages';
+import { PlatformCustomersPage, PlatformPlansPage, PlatformRechargesPage, PlatformTenantsPage } from '../pages/PlatformPages';
+import { MediaTasksPage, PromptTemplatesPage } from '../pages/AiPages';
 import { TenantWorkspacePage } from '../pages/TenantWorkspacePage';
 import { TaskBoardPage } from '../pages/TaskBoardPage';
 import { TaskReportPage } from '../pages/TaskReportPage';
@@ -45,10 +45,11 @@ export const adminMenus: AdminMenuItem[] = [
   { key: '/admin/quota', icon: <WalletOutlined />, label: '算力总池' },
   { key: '/admin/compliance', icon: <SafetyOutlined />, label: '合规中心' },
   { key: '/admin/prompt-templates', icon: <SettingOutlined />, label: 'AI · Prompt 模板' },
-  { key: '/admin/generation-tasks', icon: <CloudServerOutlined />, label: 'AI · 生成监控' },
+  { key: '/admin/media-tasks', icon: <CloudServerOutlined />, label: 'AI · 生成监控' },
   { key: '/platform/dashboard', icon: <CloudServerOutlined />, label: '平台 · 运营看板' },
   { key: '/platform/tenants', icon: <TeamOutlined />, label: '平台 · 租户审核' },
   { key: '/platform/plans', icon: <SettingOutlined />, label: '平台 · 套餐管理' },
+  { key: '/platform/recharges', icon: <DollarOutlined />, label: '平台 · 充值确认' },
   { key: '/platform/payment', icon: <AccountBookOutlined />, label: '平台 · 收款入池' },
   { key: '/platform/customers', icon: <ShopOutlined />, label: '平台 · 客户管理' },
 ];
@@ -61,7 +62,7 @@ export const pageConfig: Record<string, PageConfig> = {
   '/admin/asset': { title: '素材中心', description: '品牌素材、推优待审与行业资产包统一管理，支持分类、上传与推优审核。', columns: [] },
   '/admin/calendar': { title: '营销日历', description: '按营销节点管理内容包：日历标记、侧抽屉查看与撤销。', columns: [] },
   '/admin/audit': { title: '内容审核', description: '审核待发布的作品，通过或驳回并填写意见；数据范围由角色决定。', columns: [] },
-  '/admin/content-packages': { title: '内容包管理', description: '按营销日创建定时下发任务，支持撤销与下发异常检查。', columns: ['名称', '营销日', '下发时刻', '任务模板', '状态', '操作'] },
+  '/admin/content-packages': { title: '内容包管理', description: '创建、停用营销节点内容包。', columns: ['名称', '场景', '素材数', '状态', '周期', '操作'] },
   '/admin/styles': { title: '风格库', description: '维护轻奢、婚庆、国风等行业内容风格表达。', columns: ['风格名称', '适用场景', 'Prompt', '排序', '状态', '操作'] },
   '/admin/exports': { title: '导出任务', description: '创建数据导出任务并查看进度与下载链接。', columns: ['任务ID', '类型', '状态', '行数', '创建时间', '操作'] },
   '/admin/tasks': { title: '任务管理', description: '下发门店营销任务并查看三级执行看板。', columns: ['任务名称', '执行对象', '周期', '完成率', '操作'] },
@@ -71,9 +72,10 @@ export const pageConfig: Record<string, PageConfig> = {
   '/admin/task-modify-logs': { title: '任务修改记录', description: '查询任务编辑历史。', columns: [] },
   '/admin/compliance': { title: '合规中心', description: '维护品牌词库与品牌、门店级审核开关。', columns: ['词条', '风险级别', '适用范围', '更新时间', '操作'] },
   '/admin/prompt-templates': { title: 'Prompt 模板管理', description: '版本化维护后端 AI prompt 模板，前端只传原始意图。', columns: [] },
-  '/admin/generation-tasks': { title: '生成任务监控', description: '查看 AI 生成状态、失败原因和原始输入快照。', columns: [] },
+  '/admin/media-tasks': { title: '生成任务监控', description: '查看模型侧任务状态、实际提示词与失败退款情况。', columns: [] },
   '/platform/tenants': { title: '租户开通审核', description: '审核企业申请，开通租户并配置初始门店和积分额度。', columns: [] },
   '/platform/plans': { title: '套餐管理', description: '维护租户可选择的年度套餐模板，修改不影响已开通租户。', columns: [] },
+  '/platform/recharges': { title: '充值确认', description: '确认对公转账充值，核对凭证并将金额写入租户总池。', columns: [] },
   '/platform/customers': { title: '客户管理', description: '维护客户联系人、角色和运营跟进备注。', columns: [] },
 };
 
@@ -103,10 +105,11 @@ export function AppRoutes() {
       <Route path="/admin/task-modify-logs" element={<TaskModifyLogsPage />} />
       <Route path="/admin/quota" element={<PoolPage />} />
       <Route path="/admin/prompt-templates" element={<PromptTemplatesPage />} />
-      <Route path="/admin/generation-tasks" element={<GenerationTasksPage />} />
+      <Route path="/admin/media-tasks" element={<MediaTasksPage />} />
       <Route path="/platform/dashboard" element={<PlatformDashboardPage />} />
       <Route path="/platform/tenants" element={<PlatformTenantsPage {...pageConfig['/platform/tenants']} />} />
       <Route path="/platform/plans" element={<PlatformPlansPage {...pageConfig['/platform/plans']} />} />
+      <Route path="/platform/recharges" element={<PlatformRechargesPage {...pageConfig['/platform/recharges']} />} />
       <Route path="/platform/payment" element={<PaymentPage />} />
       <Route path="/platform/customers" element={<PlatformCustomersPage {...pageConfig['/platform/customers']} />} />
       {Object.entries(pageConfig).filter(([path]) => !path.startsWith('/platform/') && !['/admin/tenant-workspace', '/admin/task-board', '/admin/task-report', '/admin/task-remind', '/admin/task-modify-logs', '/admin/operation', '/admin/stores', '/admin/members', '/admin/asset', '/admin/calendar', '/admin/audit', '/admin/content-packages', '/admin/styles', '/admin/exports', '/admin/compliance', '/admin/quota'].includes(path)).map(([path, config]) => <Route key={path} path={path} element={<CrudPage {...config} />} />)}

@@ -20,6 +20,13 @@ export default {
       pages: ['employees/index', 'invite/index', 'quota/index', 'tasks/index', 'review/index', 'store-data/index', 'recharge/index'],
     },
   ],
+  // 微信同声传译插件（语音 ASR 一期方案，纯前端出文字，后端零改动）
+  plugins: {
+    WechatSI: {
+      version: '0.3.5',
+      provider: 'wx069ba97219f66d99',
+    },
+  },
   window: {
     navigationBarBackgroundColor: '#ffffff',
     navigationBarTextStyle: 'black',

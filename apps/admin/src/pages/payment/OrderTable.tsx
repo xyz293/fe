@@ -53,7 +53,7 @@ export function OrderTable({ orders, total, pageNo, loading, actingId, onPageCha
               <Button type="link" size="small" loading={actingId === order.id} onClick={() => onConfirm(order)}>确认入池</Button>
               <Button type="link" size="small" danger loading={actingId === order.id} onClick={() => onCancel(order)}>撤销</Button>
             </span>
-          ) : <Typography.Text type="secondary">-</Typography>,
+          ) : <Typography.Text type="secondary">-</Typography.Text>,
         },
       ]}
     />

@@ -192,9 +192,97 @@ export interface ChatResult {
   versions: string[];
 }
 
-export interface GenerateResult {
-  taskId?: LongId;
-  workId?: LongId;
+// ---- 对话模式（引导式聊天创作 /api/chat/sessions，文档 §2）：AI 追问补齐要素，一次出 3 版文案，提示词全隐藏 ----
+
+/** 对话消息角色（历史接口 role 为 USER / AI） */
+export type ChatRole = 'USER' | 'AI';
+
+/** 会话状态：ACTIVE 可继续对话 / CLOSED 已关闭（发消息报 1001，7 天不活跃自动关闭） */
+export type ChatSessionStatus = 'ACTIVE' | 'CLOSED';
+
+/** 对话会话（ChatSession，文档 §2.5）：要素收集状态机存在 context JSON 里 */
+export interface ChatSession {
+  id: LongId;
+  tenantId: LongId;
+  userId: LongId;
+  /** 如「朋友圈 · 创作对话」 */
+  title: string;
+  /** 创作场景（≤32 字符）：朋友圈 / 小红书 / 视频号等 */
+  scene: string;
+  status: ChatSessionStatus;
+  /** 要素收集状态 JSON 字符串（product/sellingPoint/audience/rounds），前端仅透传 */
+  context?: string | null;
+  /** 已发生的微调次数（每次微调扣 1 点） */
+  reviseCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** 会话消息（GET /api/chat/sessions/{id} 返回；AI 消息 content 是 JSON 字符串，渲染前需解析） */
+export interface ChatSessionMessage {
+  id: LongId;
+  role: ChatRole;
+  /** USER=用户原话；AI 为 JSON 字符串：{"action":"ASK","question":"..."} / {"action":"GENERATE","versions":[...],"revisedFrom":2} */
+  content: string;
+  createdAt?: string;
+}
+
+/** GET /api/chat/sessions/{id} 全量历史（重进页面恢复） */
+export interface ChatSessionDetail {
+  session: ChatSession;
+  messages: ChatSessionMessage[];
+}
+
+/** 对话回复动作：ASK=追问（不扣费）/ GENERATE=出稿（已扣费；扣费失败整轮不落库可直接重发） */
+export type ChatReplyAction = 'ASK' | 'GENERATE';
+
+/** POST /api/chat/sessions/{id}/messages 与 /revise 的响应（ChatReplyVO，文档 §2.5） */
+export interface ChatReply {
+  sessionId: LongId;
+  action: ChatReplyAction;
+  /** action=ASK 时有值：AI 追问文案 */
+  question?: string | null;
+  /** action=GENERATE 时有值：首次出稿 3 版，微调仅 1 版 */
+  versions?: string[] | null;
+  /** 最新要素收集状态 JSON 字符串 */
+  context?: string | null;
+  messageId?: LongId;
+}
+
+/** POST /api/chat/sessions 创建会话请求（scene 必填 ≤32 字符） */
+export interface CreateChatSessionRequest {
+  scene: string;
+}
+
+/** POST /api/chat/sessions/{id}/revise 微调请求（versionNo 对应最近一次出稿的第几版，1 起） */
+export interface ChatReviseRequest {
+  versionNo: number;
+  instruction: string;
+}
+
+// —— 前端渲染模型（由上述契约解析而来，页面统一渲染实时消息与历史消息） ——
+
+/** 单条出稿文案（首次 3 版可横滑；微调后单版刷新并打角标） */
+export interface ChatCopyVariant {
+  /** 版本序号（1 起），微调后不变 */
+  index: number;
+  /** 风格标签（正式契约 versions 为纯文本数组，无标签，展示「版本 N」） */
+  tag?: string;
+  content: string;
+  /** 是否被微调过（前端展示「已修改」角标） */
+  refined?: boolean;
+}
+
+/** 对话页渲染用消息（USER 原话 / AI 追问 / AI 出稿卡片，历史解析与实时追加共用） */
+export interface ChatMessage {
+  role: ChatRole;
+  /** USER 原话、AI 追问文案或出稿引导语 */
+  content: string;
+  /** AI 出稿卡片（GENERATE 时有值；微调消息为单版卡片） */
+  copies?: ChatCopyVariant[];
+  /** 微调消息：基于第几版改写（来自历史 AI content 的 revisedFrom） */
+  revisedFrom?: number;
+  createdAt?: string;
 }
 
 export type AIGenerationType = 'IMAGE' | 'VIDEO';
@@ -223,127 +311,128 @@ export interface CreationConfig {
   refAssetLimit?: number;
 }
 
+/** POST /api/work/generate 请求体（AI 创作域文档 §1.4.1） */
 export interface GenerateWorkRequest {
+  /** IMAGE / VIDEO（大小写不敏感，其他值 1001） */
   type: AIGenerationType;
-  styleId: LongId;
+  /** 发布平台（≤32 字符），如 douyin */
   platform: string;
-  userInput: string;
-  /** 产品名（创作页独立输入，可与描述拼接） */
+  /** 风格 ID，须可见（本租户或平台内置且启用），否则 1002 */
+  styleId: LongId;
+  /** 产品名（≤2000） */
   productName?: string;
-  refAssetIds: LongId[];
+  /** 用户补充说明（≤4000） */
+  userInput?: string;
+  /** 参考图 URL 列表（最多 10 条） */
+  refImageUrls?: string[];
+  /** 引用素材 ID（最多 20 个，须三层可见 APPROVED，否则整次生成报 1001） */
+  assetIds?: LongId[];
+  /** 关联对话会话 ID（对话模式「去配图」透传；带它则不再自动生成成套文案，选定文案由 PUT /work/{id}/caption 回填，文档 §2.6） */
+  chatSessionId?: LongId | null;
 }
 
-export type WorkGenerationStatus = 0 | 1 | 2 | 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED';
-
-export interface WorkStatusResponse {
-  taskId?: LongId;
-  workId?: LongId;
-  status: WorkGenerationStatus;
-  type?: AIGenerationType;
-  contentUrl?: string;
-  coverUrl?: string;
-  errorCode?: string;
-  errorMessage?: string;
-  consumedQuota?: number;
-  remainingQuota?: number;
-  progress?: number;
-}
-
+/** 提示词模板（AI 创作域文档 §1.5.2/§1.6）：status=1 为当前生效版本（每个 scene 仅一条） */
 export interface PromptTemplate {
   id: LongId;
+  /** 仅支持 IMAGE / VIDEO（其他值 1001） */
   scene: AIGenerationType;
+  /** 新增版本时 = 该 scene 历史最大版本 + 1，旧版本全部停用 */
   version: number;
-  content: string;
-  status: 'ACTIVE' | 'INACTIVE' | 0 | 1;
+  /** 模板内容，可用占位符：{{platform}} {{style}} {{productName}} {{userInput}} */
+  template: string;
+  /** 1 启用（生效）/ 0 停用（历史版本） */
+  status: 0 | 1;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface PromptTemplateQuery {
-  pageNo?: number;
-  pageSize?: number;
-  scene?: AIGenerationType;
-  status?: 'ACTIVE' | 'INACTIVE' | 0 | 1;
-}
-
+/** PUT /api/admin/prompt-template 保存请求（仅 HQ_ADMIN；id=null 即新增版本） */
 export interface PromptTemplateRequest {
+  id?: LongId | null;
   scene: AIGenerationType;
-  content: string;
+  template: string;
 }
 
-export interface GenerationTaskMonitor {
+/** 生成任务状态（AI 创作域文档 §1.6）：视频额外经过 SUBMITTED ⇄ POLLING */
+export type MediaTaskStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'SUBMITTED' | 'POLLING';
+
+/** 生成任务（管理端运维视角，AI 创作域文档 §1.5.1/§1.6） */
+export interface MediaTask {
   id: LongId;
-  taskId?: LongId;
-  workId?: LongId;
+  tenantId: LongId;
+  userId: LongId;
+  workId: LongId;
+  storeId: LongId;
+  /** IMAGE / VIDEO */
   type: AIGenerationType;
-  storeName?: string;
-  userName?: string;
-  styleName?: string;
-  platform?: string;
-  userInput?: string;
-  duration?: number;
-  status: WorkGenerationStatus;
-  errorCode?: string;
-  errorMessage?: string;
-  createdAt?: string;
+  scene?: AIGenerationType;
+  status: MediaTaskStatus;
+  /** 实际送模型的提示词 */
+  prompt?: string | null;
+  /** 模型侧任务 ID（视频） */
+  providerTaskId?: string | null;
+  /** 成品地址（当前 local:// 占位，OSS 接入前不可直接预览） */
+  resultUrl?: string | null;
+  /** 本任务扣费点数 */
+  cost?: number;
+  errorMessage?: string | null;
+  /** 0 未退款 / 1 已自动退款 */
+  refundStatus?: 0 | 1;
+  startedAt?: string | null;
+  finishedAt?: string | null;
 }
 
-export interface GenerationTaskQuery {
-  pageNo?: number;
-  pageSize?: number;
-  type?: AIGenerationType;
-  status?: WorkGenerationStatus;
-  startDate?: string;
-  endDate?: string;
-}
-
-/** 发布状态（对齐后端 publish_status，《创作与作品域-后端方案》） */
+/** 发布状态（对齐后端 publish_status，AI 创作域文档 §1.2 状态机） */
 export type PublishStatus = 'NONE' | 'DRAFT' | 'PENDING_AUDIT' | 'APPROVED' | 'REJECTED' | 'PUBLISHED';
 
-export interface Work {
-  id: string;
-  title: string;
-  coverUrl?: string;
-  contentUrl?: string;
-  type: 'COPY' | 'IMAGE' | 'VIDEO';
-  /** publish_status：数字或新旧字符串枚举，前端用 normalizePublishStatus 归一化后查 PUBLISH_STATUS */
-  status: 0 | 1 | 2 | 3 | 4 | 5 | 'DRAFT' | 'PENDING_REVIEW' | 'READY' | 'REJECTED' | PublishStatus;
-  summary?: string;
-  /** 配套文案（发布复制/编辑用，等价于后端 caption） */
-  caption?: string;
-  /** 目标发布平台 */
-  platform?: string;
-  /** 最近一条 REJECT 的审核意见 */
-  rejectOpinion?: string;
-  rejectReason?: string;
-  failureReason?: string;
-}
+/** 作品生成维度状态（AI 创作域文档 §1.1，与 publishStatus 独立流转） */
+export type AiWorkStatus = 'PENDING' | 'SUCCESS' | 'FAILED';
 
-// ---- 创作与作品域 · 内容审核 /api/admin/audit/works ----
-
-export interface AuditWorkItem {
+/** 作品（AI 创作域文档 §1.6）：生成是异步的，返回 status=PENDING 后前端轮询 GET /api/work/{id} */
+export interface AiWork {
   id: LongId;
-  title?: string;
-  coverUrl?: string;
-  contentUrl?: string;
-  type?: 'COPY' | 'IMAGE' | 'VIDEO';
-  /** 待审文案 */
-  caption?: string;
-  summary?: string;
-  submitterName?: string;
-  storeName?: string;
-  submittedAt?: string;
-  status?: PublishStatus | string;
+  tenantId: LongId;
+  userId: LongId;
+  /** IMAGE / VIDEO */
+  type: AIGenerationType;
+  /** 当前关联生成任务 ID */
+  mediaTaskId?: LongId | null;
+  platform?: string | null;
+  styleId?: LongId | null;
+  /** 风格名称快照（风格删除后仍在） */
+  styleName?: string | null;
+  userInput?: string | null;
+  /** 参考图 URL，换行符分隔的字符串（渲染前需 split('\n')，文档 §3.4） */
+  refImageUrls?: string | null;
+  promptTemplateId?: LongId | null;
+  promptTemplateVersion?: number | null;
+  /** 成品地址（当前 local:// 占位协议，OSS 接入前不可直接预览，文档 §3.5） */
+  contentUrl?: string | null;
+  /** 生成文案（预留） */
+  copywriting?: string | null;
+  status: AiWorkStatus;
+  /** 失败原因（status=FAILED 时有值；失败后额度已自动退回） */
+  failReason?: string | null;
+  publishStatus: PublishStatus;
+  /** 配套文案（成功后异步补写，可能晚于 SUCCESS 到达；失败留空可手动改） */
+  caption?: string | null;
+  /** 引用素材 ID 快照，JSON 数组字符串（如 "[12,15]"），渲染前需 JSON.parse（文档 §3.4） */
+  sourceAssetIds?: string | null;
+  /** 关联对话会话 ID（对话模式「去配图」产出的作品；列表/详情均返回，可跳回对话溯源，文档 §2.6） */
+  chatSessionId?: LongId | null;
+  /** 最新一次审核意见（无审核记录为 null；驳回时前端展示它） */
+  auditOpinion?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export interface AuditWorkQuery {
-  status?: string;
-  pageNo?: number;
-  pageSize?: number;
-}
+/** 兼容别名：作品模型已统一为文档 §1.6 结构（/works 旧列表接口同样返回该结构） */
+export type Work = AiWork;
 
+// ---- 企业管理域 · 内容审核 /api/admin/audit/works（文档 §2.4，元素为 AiWork 结构，最多 100 条无分页） ----
+
+/** POST /api/admin/audit/works/{id}/reject 请求体（文档 §2.4.2，opinion 必填 ≤512） */
 export interface RejectWorkRequest {
-  /** 驳回意见（必填，字数上限 200） */
   opinion: string;
 }
 
@@ -732,62 +821,62 @@ export interface PlatformCustomerRequest {
 
 // ---- 1. 数据看板 /api/admin/dashboard ----
 
+/** 经营概览（企业管理域文档 §2.3.1；REGION_ADMIN 自动只统计本区域；服务端有缓存，短时变动不立即反映） */
 export interface DashboardOverview {
-  tenantCount?: number;
-  activeTenantCount?: number;
-  storeCount?: number;
-  memberCount?: number;
-  workCount?: number;
-  publishedWorkCount?: number;
-  assetCount?: number;
-  pendingAssetCount?: number;
-  quotaUsed?: number;
-  quotaTotal?: number;
+  /** 近 7 天有产出作品的门店数 */
+  activeStores: number;
+  /** 本周（周一起）新增作品数 */
+  weeklyWorks: number;
+  /** 本周发布数 */
+  weeklyPublishes: number;
+  /** 当前额度余额合计（本租户所有账户） */
+  totalQuota: number;
+  /** 本周消耗额度 */
+  usedQuota: number;
 }
 
+/** 近 7 天趋势点（企业管理域文档 §2.3.2，固定返回含今天共 7 个点、无数据补 0） */
 export interface DashboardTrendPoint {
+  /** yyyy-MM-dd */
   date: string;
-  workCount?: number;
-  publishCount?: number;
-  activeMemberCount?: number;
-  quotaUsed?: number;
+  works: number;
+  publishes: number;
 }
 
 // ---- 2. 素材管理 /api/admin/assets（文档 §3.4，类型见 AssetItem / AssetReviewRequest） ----
 
 // ---- 3. 合规管理 /api/admin/compliance ----
 
+/** 合规词（企业管理域文档 §2.5.1）：列表只返回启用中的词 */
 export interface ComplianceWord {
   id: LongId;
   word: string;
-  level?: string;
-  category?: string;
-  replacement?: string;
-  enabled?: number | boolean;
+  /** 1 替换（提示词中静默替换为 replacement，生成继续）/ 2 拒绝（直接报 4001 拦截） */
+  level: 1 | 2;
+  /** level=1 时的替换文本；缺失按替换为空串处理 */
+  replacement?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
 
+/** PUT /api/admin/compliance/words 请求体（仅 HQ_ADMIN；id 空=新增，有值=更新，不存在报 1002） */
 export interface UpsertComplianceWordRequest {
-  id?: LongId;
+  id?: LongId | null;
   word: string;
-  level?: string;
-  category?: string;
+  level: 1 | 2;
   replacement?: string;
 }
 
+/** 作品审核开关（企业管理域文档 §2.5.2）：orgId=0 为品牌级默认；门店未配置时自动回退品牌级 */
 export interface AuditConfig {
   orgId: LongId;
-  autoReview?: boolean;
-  sensitiveFilter?: boolean;
-  proofRequired?: boolean;
-  updatedAt?: string;
+  /** 开→之后生成成功的作品进审核队列；关→直接草稿。只影响之后的作品，不改存量 */
+  enabled: boolean;
 }
 
+/** PUT /api/admin/compliance/audit-config/{orgId} 请求体（响应 data 为 { orgId, enabled }） */
 export interface UpdateAuditConfigRequest {
-  autoReview?: boolean;
-  sensitiveFilter?: boolean;
-  proofRequired?: boolean;
+  enabled: boolean;
 }
 
 // ---- 4. 资产配置域 · 内容包（营销日历定时下发任务，文档 §3.5）/api/admin/content-packages ----
@@ -857,21 +946,31 @@ export interface ContentPackageQuery {
 
 // ---- 5. 导出任务 /api/admin/exports ----
 
+/** 导出类型（企业管理域文档 §2.6.1） */
+export type ExportType = 1 | 2 | 3 | 4;
+
+/** POST /api/admin/exports 创建导出（同租户进行中最多 3 个，超出报 1003；创建即异步执行） */
 export interface CreateExportRequest {
-  type: string;
-  dateFrom?: string;
-  dateTo?: string;
-  orgId?: LongId;
+  /** 1 消耗明细 / 2 充值记录 / 3 任务 / 4 产出 */
+  exportType: ExportType;
+  /** 查询条件 JSON 字符串（如 '{"from":"2026-09-01","to":"2026-09-30"}'），原样存储 */
+  queryParams?: string;
 }
 
+/** 导出任务（企业管理域文档 §2.6.2；前端建议创建后轮询列表，status=1 时展示下载入口） */
 export interface ExportTask {
   id: LongId;
-  type?: string;
-  status?: string;
-  fileUrl?: string;
-  rowCount?: number;
+  tenantId: LongId;
+  createdBy: LongId;
+  exportType: ExportType;
+  queryParams?: string | null;
+  /** 0 处理中 / 1 已完成 / 2 失败 */
+  status: 0 | 1 | 2;
+  /** 完成后的文件地址（当前 local://export/... 占位，接 OSS 后可直接下载，文档 §3.5） */
+  fileUrl?: string | null;
+  failReason?: string | null;
   createdAt?: string;
-  finishedAt?: string;
+  finishedAt?: string | null;
 }
 
 // ---- 6. 会员管理 /api/admin/members（对应租户模块 UserAccount 模型） ----
@@ -881,6 +980,12 @@ export interface UserAccount {
   phone?: string;
   openid?: string;
   nickname?: string;
+  /** 实时余额：STAFF→员工账户，OWNER→门店，管理层→租户池（员工额度文档 §1.3） */
+  quotaBalance?: number;
+  /** 成员关系 ID（STAFF 才有）：划拨/回收接口的 memberRoleId 直接取这里 */
+  userOrgRoleId?: LongId | null;
+  /** 角色编码（尽力兼容字段，如 STAFF/OWNER；后端未返回时前端按 userOrgRoleId 推断） */
+  role?: string;
   status?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -894,22 +999,31 @@ export interface AdminMemberListQuery {
 
 // ---- 7. 门店管理 /api/admin/stores ----
 
-export interface StoreAccountSummary {
-  storeId: LongId;
-  storeName: string;
-  parentId?: LongId;
-  parentName?: string;
-  memberCount?: number;
-  workCount?: number;
-  status?: number;
+/** 门店节点（企业管理域文档 §2.7.1，Org 结构） */
+export interface StoreOrg {
+  id: LongId;
+  tenantId: LongId;
+  /** 父节点 ID；门店（type=3）不可作为父级 */
+  parentId?: LongId | null;
+  /** 1 品牌 / 2 区域 / 3 门店（文档 §3.10） */
+  type: 1 | 2 | 3;
+  name: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
+/** GET /api/admin/stores 元素（企业管理域文档 §2.7.1；REGION_ADMIN 只看本区域门店） */
+export interface StoreAccountSummary {
+  store: StoreOrg;
+  memberCount: number;
+  /** 店长用户 ID（可能 null） */
+  ownerUserId?: LongId | null;
+}
+
+/** POST /api/admin/stores 创建门店（文档 §2.7.2；parentId 缺省挂当前管理员组织；父节点须品牌/区域，成功自动初始化余额 0 的额度账户） */
 export interface CreateStoreRequest {
   name: string;
   parentId?: LongId;
-  address?: string;
-  contactPhone?: string;
 }
 
 export interface UpdateStoreParentRequest {
@@ -918,25 +1032,36 @@ export interface UpdateStoreParentRequest {
 
 // ---- 8. 风格管理 /api/admin/styles ----
 
+/** 风格（企业管理域文档 §2.8）：列表=本租户自建 + 平台内置（tenantId 为空）且 status=1，按 sortNo,id 升序；创作页风格数据源即此 */
 export interface StyleOption {
   id: LongId;
+  /** 平台内置为 null */
+  tenantId?: LongId | null;
+  /** 关联行业包（平台风格场景），租户自建一般传 null */
+  packageId?: LongId | null;
   name: string;
-  description?: string;
-  prompt?: string;
-  enabled?: number | boolean;
-  sortOrder?: number;
+  description?: string | null;
+  exampleUrl?: string | null;
+  sortNo?: number;
+  status?: 0 | 1;
+  version?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+/** POST /api/admin/styles 创建风格（仅 HQ_ADMIN） */
 export interface CreateStyleRequest {
   name: string;
   description?: string;
-  prompt?: string;
-  sortOrder?: number;
+  exampleUrl?: string;
+  sortNo?: number;
+  packageId?: LongId | null;
 }
 
+/** PUT /api/admin/styles/{id} 更新风格（仅 HQ_ADMIN；name 必填，不存在报 1002） */
 export interface UpdateStyleRequest {
-  name?: string;
+  name: string;
   description?: string;
-  prompt?: string;
-  sortOrder?: number;
+  exampleUrl?: string;
+  sortNo?: number;
 }

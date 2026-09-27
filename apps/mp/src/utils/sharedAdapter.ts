@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro';
-import type { MyQuota } from '@xiaoa/share';
-import type { AdminTaskReport, AssetItem, AssetQuery, AsyncTask, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatResult, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateResult, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, Work, WorkStatusResponse } from '@xiaoa/share/types';
+// 额度域类型定义在 share/src/api/quota.ts，经 @xiaoa/share 主入口导出（@xiaoa/share/types 仅含 types.ts）
+import type { MyQuota, StaffQuotaTransferRequest } from '@xiaoa/share';
+import type { AdminMemberListQuery, AdminTaskReport, AiWork, AssetItem, AssetQuery, AsyncTask, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatReply, ChatResult, ChatReviseRequest, ChatSession, ChatSessionDetail, CreateChatSessionRequest, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, RejectWorkRequest, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, UserAccount, Work } from '@xiaoa/share/types';
 
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -34,13 +35,17 @@ async function request<T>(url: string, options: RequestOptions = {}) {
 export const taroRequestAdapter = { request };
 
 /**
- * 额度计费域接口（小程序端薄封装，仅包含 C 端需要的接口，文档 §2.5）。
+ * 额度计费域接口（小程序端薄封装，仅包含 C 端与店长需要的接口，文档 §2.5 / 员工额度文档 §1.3）。
  * 类型从 @xiaoa/share/types 引入，字段与《额度计费域 & 资产配置域·前端接口文档》对齐；
  * 管理端完整封装见 share/src/api/quota.ts 的 createQuotaApi。
  */
 export const quotaApi = {
-  /** GET /api/quota/my 我的额度（OWNER/STAFF→本店账户；recentFlows 固定最近 10 条流水，不分页） */
+  /** GET /api/quota/my 我的额度（三级账户：STAFF→员工账户/老数据回退门店，OWNER→门店，管理层→租户池；recentFlows 固定最近 10 条流水） */
   getMyQuota: () => request<MyQuota>('/quota/my'),
+  /** POST /api/quota/staff/allocate 店长向员工划拨（仅 OWNER；成功 data:null；3001 门店池不足） */
+  staffAllocate: (data: StaffQuotaTransferRequest) => request<void>('/quota/staff/allocate', { method: 'POST', data }),
+  /** POST /api/quota/staff/recall 店长回收员工未用额度（仅 OWNER；成功 data:null；员工余额不足 3001） */
+  staffRecall: (data: StaffQuotaTransferRequest) => request<void>('/quota/staff/recall', { method: 'POST', data }),
 };
 
 export const sharedApi = {
@@ -91,14 +96,27 @@ export const sharedApi = {
     return request<Badge[]>(`/task/badges${query ? `?${query}` : ''}`);
   },
   chat: (message: string, taskId?: number | string) => request<ChatResult>('/chat', { method: 'POST', data: { message, ...(taskId ? { taskId } : {}) } }),
+  // ===== 对话模式（员工额度 & 对话模式文档 §2：引导式聊天创作，提示词全隐藏） =====
+  /** POST /api/chat/sessions 创建会话（scene 必填 ≤32 字符：朋友圈/小红书/视频号等） */
+  createChatSession: (data: CreateChatSessionRequest) => request<ChatSession>('/chat/sessions', { method: 'POST', data }),
+  /** GET /api/chat/sessions 本人最近 20 条会话，按活跃时间倒序 */
+  getChatSessions: () => request<ChatSession[]>('/chat/sessions'),
+  /** GET /api/chat/sessions/{id} 全量历史（重进页面恢复；AI 消息 content 为 JSON 字符串，前端需解析） */
+  getChatSession: (sessionId: number | string) => request<ChatSessionDetail>(`/chat/sessions/${sessionId}`),
+  /** POST /api/chat/sessions/{id}/messages 发一句话（错误：1001 会话关闭/7 天未活跃 / 2003 他人会话 / 3001 额度不足 / 4001 违规词；3001/4001 本轮不落库可直接重发） */
+  sendChatMessage: (sessionId: number | string, text: string) => request<ChatReply>(`/chat/sessions/${sessionId}/messages`, { method: 'POST', data: { text } }),
+  /** POST /api/chat/sessions/{id}/revise 微调指定版本（扣 1 点；响应 versions 仅一版新文案；1001 无可微调/超范围，1000 LLM 失败稍后重试） */
+  reviseChat: (sessionId: number | string, data: ChatReviseRequest) => request<ChatReply>(`/chat/sessions/${sessionId}/revise`, { method: 'POST', data }),
   getCreationConfig: () => request<CreationConfig>('/creation/config'),
-  generate: (data: GenerateWorkRequest) => request<GenerateResult>('/work/generate', { method: 'POST', data }),
-  getWorkStatus: (workId: number | string) => request<WorkStatusResponse>(`/work/${workId}/status`),
-  // ===== 创作与作品域（《创作与作品域-后端方案》，管理端完整封装见 share/src/api/work.ts） =====
-  /** PUT /api/work/{id}/caption 修改配套文案（驳回改稿重提后后端自动回 PENDING_AUDIT） */
+  // ===== AI 创作域（《AI 创作域 & 企业管理域·前端接口文档》§1，管理端完整封装见 share/src/api/work.ts） =====
+  /** POST /api/work/generate 发起生成（同步建作品+扣费+提交任务；错误：1001 参数/4001 合规拦截/1000 额度不足/3001 风格不可用） */
+  generate: (data: GenerateWorkRequest) => request<AiWork>('/work/generate', { method: 'POST', data }),
+  /** GET /api/work/{id} 作品详情（轮询用，仅作品本人；建议 2~3 秒间隔，VIDEO 放宽至 5~10 秒） */
+  getWork: (workId: number | string) => request<AiWork>(`/work/${workId}`),
+  /** PUT /api/work/{id}/caption 修改配套文案（仅 DRAFT/APPROVED/REJECTED 可改；REJECTED 改稿成功自动回 PENDING_AUDIT 重提审） */
   updateWorkCaption: (workId: LongId, caption: string) => request<void>(`/work/${workId}/caption`, { method: 'PUT', data: { caption } }),
-  /** POST /api/work/{id}/regenerate 重新生成（全价扣费，前端二次确认） */
-  regenerateWork: (workId: LongId) => request<GenerateResult>(`/work/${workId}/regenerate`, { method: 'POST' }),
+  /** POST /api/work/{id}/regenerate 重新生成（原 prompt 全价扣费，status 重置 PENDING 继续轮询；前端二次确认） */
+  regenerateWork: (workId: LongId) => request<void>(`/work/${workId}/regenerate`, { method: 'POST' }),
   /** GET /api/assets 素材库列表（文档 §3.3.2：仅 category 过滤，返回三层可见性合并的 Asset[]，最多 200 条不分页；scope 在客户端按 item.scope 分组） */
   getAssets: (params: AssetQuery = {}) => {
     const pairs = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
@@ -132,10 +150,19 @@ export const sharedApi = {
     });
   }),
   getAsyncTask: (taskId: string) => request<AsyncTask>(`/task/${taskId}`),
+  /** GET /api/admin/members 成员列表（店长「员工与角色」页用；STAFF 记录带 quotaBalance/userOrgRoleId，员工额度文档 §1.3） */
+  getAdminMembers: (params: AdminMemberListQuery = {}) => {
+    const query = Object.entries(params).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
+    return request<PageResult<UserAccount>>(`/admin/members${query ? `?${query}` : ''}`);
+  },
+  // 管理端专用接口（AI 创作域 §1.5 / 企业管理域 §2.4），小程序端不用，占位防误调
   getPromptTemplates: () => Promise.reject(new Error('当前端不支持该接口')),
   createPromptTemplate: () => Promise.reject(new Error('当前端不支持该接口')),
   rollbackPromptTemplate: () => Promise.reject(new Error('当前端不支持该接口')),
-  getGenerationTasks: () => Promise.reject(new Error('当前端不支持该接口')),
+  getMediaTasks: () => Promise.reject(new Error('当前端不支持该接口')),
+  auditList: () => Promise.reject(new Error('当前端不支持该接口')),
+  approveAuditWork: () => Promise.reject(new Error('当前端不支持该接口')),
+  rejectAuditWork: (_id: number | string, _data: RejectWorkRequest) => Promise.reject(new Error('当前端不支持该接口')),
   getWorks: (pageNo = 1, pageSize = 20) => request<PageResult<Work>>('/works', { data: { pageNo, pageSize } }),
   publishRecord: (data: PublishRecord) => request<void>('/publish-record', { method: 'POST', data }),
 };

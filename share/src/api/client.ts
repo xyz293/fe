@@ -1,6 +1,7 @@
 import type {
   AdminMemberListQuery,
   AdminTaskReport,
+  AiWork,
   AsyncTask,
   AuthJoinRequest,
   AuthJoinResult,
@@ -11,10 +12,15 @@ import type {
   AuditConfig,
   Badge,
   BadgeQuery,
+  ChatReply,
+  ChatReviseRequest,
   ChatResult,
+  ChatSession,
+  ChatSessionDetail,
   ComplianceWord,
   ContentPackage,
   ContentPackageQuery,
+  CreateChatSessionRequest,
   CreateContentPackageRequest,
   CreateExportRequest,
   CreateInviteRequest,
@@ -26,13 +32,10 @@ import type {
   DashboardOverview,
   DashboardTrendPoint,
   ExportTask,
-  GenerateResult,
   GenerateWorkRequest,
-  GenerationTaskMonitor,
-  GenerationTaskQuery,
+  MediaTask,
   PageResult,
   PromptTemplate,
-  PromptTemplateQuery,
   PromptTemplateRequest,
   PublishRecord,
   StoreAccountSummary,
@@ -71,7 +74,6 @@ import type {
   GrantUserRoleRequest,
   Invite,
   OrgNode,
-  WorkStatusResponse,
   Task,
   TaskModifyLog,
   TaskSummary,
@@ -132,14 +134,31 @@ export function createApi(adapter: RequestAdapter) {
       return request<Badge[]>(`/task/badges${query ? `?${query}` : ''}`);
     },
     chat: (message: string, taskId?: number | string) => request<ChatResult>('/chat', { method: 'POST', data: { message, ...(taskId ? { taskId } : {}), industry: 'jewelry-marriage' } }),
+    // ===== 对话模式（员工额度 & 对话模式文档 §2：引导式聊天创作，提示词全隐藏） =====
+    /** POST /api/chat/sessions 创建会话（scene 必填 ≤32 字符：朋友圈/小红书/视频号等） */
+    createChatSession: (data: CreateChatSessionRequest) => request<ChatSession>('/chat/sessions', { method: 'POST', data }),
+    /** GET /api/chat/sessions 本人最近 20 条会话，按活跃时间倒序 */
+    getChatSessions: () => request<ChatSession[]>('/chat/sessions'),
+    /** GET /api/chat/sessions/{id} 全量历史（重进页面恢复；AI 消息 content 为 JSON 字符串，前端需解析） */
+    getChatSession: (sessionId: number | string) => request<ChatSessionDetail>(`/chat/sessions/${sessionId}`),
+    /** POST /api/chat/sessions/{id}/messages 发一句话（核心对话接口；错误：1001 会话关闭/7 天未活跃/参数 / 2003 他人会话 / 3001 额度不足 / 4001 违规词；3001/4001 本轮不落库可直接重发） */
+    sendChatMessage: (sessionId: number | string, text: string) => request<ChatReply>(`/chat/sessions/${sessionId}/messages`, { method: 'POST', data: { text } }),
+    /** POST /api/chat/sessions/{id}/revise 微调指定版本（扣 1 点；响应 versions 仅一版新文案；错误：1001 无可微调/超范围 / 1000 LLM 失败稍后重试） */
+    reviseChat: (sessionId: number | string, data: ChatReviseRequest) => request<ChatReply>(`/chat/sessions/${sessionId}/revise`, { method: 'POST', data }),
     getCreationConfig: () => request<CreationConfig>('/creation/config'),
-    generate: (data: GenerateWorkRequest) => request<GenerateResult>('/work/generate', { method: 'POST', data }),
-    getWorkStatus: (workId: number | string) => request<WorkStatusResponse>(`/work/${workId}/status`),
+    /** POST /api/work/generate 发起生成（AI 创作域文档 §1.4.1，返回 status=PENDING 的作品；错误：1001/1002/4001/1000/3001） */
+    generate: (data: GenerateWorkRequest) => request<AiWork>('/work/generate', { method: 'POST', data }),
+    /** GET /api/work/{id} 作品详情（轮询用，仅作品本人，AI 创作域文档 §1.4.2） */
+    getWork: (workId: number | string) => request<AiWork>(`/work/${workId}`),
     getAsyncTask: (taskId: string) => request<AsyncTask>(`/task/${taskId}`),
-    getPromptTemplates: (params: PromptTemplateQuery = {}) => request<PageResult<PromptTemplate>>('/admin/prompt-template/list', { data: params }),
-    createPromptTemplate: (data: PromptTemplateRequest) => request<PromptTemplate>('/admin/prompt-template', { method: 'POST', data }),
-    rollbackPromptTemplate: (templateId: number | string) => request<PromptTemplate>(`/admin/prompt-template/${templateId}/rollback`, { method: 'PUT' }),
-    getGenerationTasks: (params: GenerationTaskQuery = {}) => request<PageResult<GenerationTaskMonitor>>('/admin/generation-task/list', { data: params }),
+    /** GET /api/admin/prompt-template 提示词模板全部版本（AI 创作域文档 §1.5.2，按 scene,version 倒序；当前生效取 status=1） */
+    getPromptTemplates: () => request<PromptTemplate[]>('/admin/prompt-template'),
+    /** PUT /api/admin/prompt-template 保存模板（仅 HQ_ADMIN；id=null 新增版本，同 scene 旧版本全部停用） */
+    createPromptTemplate: (data: PromptTemplateRequest) => request<void>('/admin/prompt-template', { method: 'PUT', data }),
+    /** PUT /api/admin/prompt-template/{id}/rollback 回滚到指定历史版本（仅 HQ_ADMIN；不存在报 1002） */
+    rollbackPromptTemplate: (templateId: number | string) => request<void>(`/admin/prompt-template/${templateId}/rollback`, { method: 'PUT' }),
+    /** GET /api/admin/media-task/list 生成任务列表（AI 创作域文档 §1.5.1，运维视角，按时间倒序；limit 默认 50，超出 1~200 自动截断） */
+    getMediaTasks: (limit = 50) => request<MediaTask[]>(`/admin/media-task/list?limit=${limit}`),
     getWorks: (pageNo = 1, pageSize = 20) => request<PageResult<Work>>('/works', { data: { pageNo, pageSize, industry: 'jewelry-marriage' } }),
     publishRecord: (data: PublishRecord) => request<void>('/publish-record', { method: 'POST', data }),
     getPlatformDashboard: (period: PlatformPeriod = 'month') => request<PlatformDashboard>(`/platform/dashboard?period=${encodeURIComponent(period)}`),
@@ -170,22 +189,22 @@ export function createApi(adapter: RequestAdapter) {
     getContentPackages: (params: ContentPackageQuery = {}) => request<PageResult<ContentPackage>>('/admin/content-packages', { data: params }),
     createContentPackage: (data: CreateContentPackageRequest) => request<ContentPackage>('/admin/content-packages', { method: 'POST', data }),
     disableContentPackage: (id: number | string) => request<void>(`/admin/content-packages/${id}`, { method: 'DELETE' }),
-    // 5. 导出任务
-    createExportTask: (data: CreateExportRequest) => request<void>('/admin/exports/', { method: 'POST', data }),
-    getExportTasks: () => request<ExportTask[]>('/admin/exports/'),
+    // 5. 导出任务（文档 §2.6：同租户进行中最多 3 个；创建后建议轮询列表，status=1 展示下载入口）
+    createExportTask: (data: CreateExportRequest) => request<ExportTask>('/admin/exports', { method: 'POST', data }),
+    getExportTasks: () => request<ExportTask[]>('/admin/exports'),
     getExportTask: (id: number | string) => request<ExportTask>(`/admin/exports/${id}`),
     // 6. 会员管理（PageResult<UserAccount>，Query: orgId?/pageNo/pageSize）
     getAdminMembers: (params: AdminMemberListQuery = {}) => {
       const query = Object.entries(params).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
       return request<PageResult<UserAccount>>(`/admin/members/${query ? `?${query}` : ''}`);
     },
-    // 7. 门店管理
-    getStoreSummaries: () => request<StoreAccountSummary[]>('/admin/stores/'),
-    createStore: (data: CreateStoreRequest) => request<void>('/admin/stores/', { method: 'POST', data }),
+    // 7. 门店管理（文档 §2.7：创建返回新门店的 StoreAccountSummary；调整归属 PATCH，data:null）
+    getStoreSummaries: () => request<StoreAccountSummary[]>('/admin/stores'),
+    createStore: (data: CreateStoreRequest) => request<StoreAccountSummary>('/admin/stores', { method: 'POST', data }),
     updateStoreParent: (storeId: number | string, data: UpdateStoreParentRequest) => request<void>(`/admin/stores/${storeId}/parent`, { method: 'PATCH', data }),
-    // 8. 风格管理
-    getStyleOptions: () => request<StyleOption[]>('/admin/styles/'),
-    createStyle: (data: CreateStyleRequest) => request<void>('/admin/styles/', { method: 'POST', data }),
+    // 8. 风格管理（文档 §2.8：DELETE 为物理删除，创作页立即不可选；历史作品保留 styleName 快照）
+    getStyleOptions: () => request<StyleOption[]>('/admin/styles'),
+    createStyle: (data: CreateStyleRequest) => request<void>('/admin/styles', { method: 'POST', data }),
     updateStyle: (id: number | string, data: UpdateStyleRequest) => request<void>(`/admin/styles/${id}`, { method: 'PUT', data }),
     deleteStyle: (id: number | string) => request<void>(`/admin/styles/${id}`, { method: 'DELETE' }),
   };

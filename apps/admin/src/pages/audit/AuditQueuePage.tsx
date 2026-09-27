@@ -1,7 +1,7 @@
 import { Button, Card, Empty, Image, Space, Spin, Tag, Typography, message } from 'antd';
 import { AuditOutlined, CheckOutlined, CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AuditWorkItem } from '@xiaoa/share/types';
+import type { AiWork } from '@xiaoa/share/types';
 import { workApi } from '../../services/sharedApi';
 import { RejectModal } from './RejectModal';
 
@@ -22,15 +22,15 @@ function PageHeading({ title, description, action }: PageProps & { action?: Reac
 function formatTime(value?: string | null) { return value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'; }
 
 /**
- * 内容审核队列（卡片流）。
- * 数据源 GET /api/admin/audit/works?status=PENDING_AUDIT（后端按数据范围裁剪：
- * 本店/本区域/全域由角色决定，前端不做本地裁剪）。
+ * 内容审核队列（卡片流，企业管理域文档 §2.4.1）。
+ * 数据源 GET /api/admin/audit/works：仅返回 PENDING_AUDIT 作品，最多 100 条、无分页，按时间倒序；
+ * 数据范围由角色决定（HQ_ADMIN 全租户 / REGION_ADMIN 本区域 / OWNER 本店），前端不做本地裁剪。
  */
 export function AuditQueuePage({ title, description }: PageProps) {
-  const [list, setList] = useState<AuditWorkItem[]>([]);
+  const [list, setList] = useState<AiWork[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [rejecting, setRejecting] = useState<AuditWorkItem | null>(null);
+  const [rejecting, setRejecting] = useState<AiWork | null>(null);
   const [rejectLoading, setRejectLoading] = useState(false);
   const [leavingIds, setLeavingIds] = useState<string[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -40,8 +40,8 @@ export function AuditQueuePage({ title, description }: PageProps) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await workApi.auditList({ status: 'PENDING_AUDIT', pageNo: 1, pageSize: 50 });
-      setList(Array.isArray(result) ? result : (result.list ?? []));
+      const result = await workApi.auditList();
+      setList(Array.isArray(result) ? result : []);
     } catch (e) {
       if (e instanceof Error) message.error(e.message || '待审列表加载失败');
     } finally {
@@ -71,7 +71,7 @@ export function AuditQueuePage({ title, description }: PageProps) {
     }
   };
 
-  const approve = async (item: AuditWorkItem) => {
+  const approve = async (item: AiWork) => {
     setProcessingId(String(item.id));
     try {
       await workApi.approveAuditWork(item.id);
@@ -121,7 +121,9 @@ export function AuditQueuePage({ title, description }: PageProps) {
           <Space direction="vertical" size={12} className="full-width">
             {list.map((item) => {
               const leaving = leavingIds.includes(String(item.id));
-              const caption = item.caption || item.summary || '';
+              const caption = item.caption || item.userInput || '';
+              // local:// 是后端本地占位协议（OSS 接入前），浏览器无法预览，渲染占位图（文档 §3.5）
+              const contentUrl = item.contentUrl && !item.contentUrl.startsWith('local://') ? item.contentUrl : '';
               return (
                 <div
                   key={String(item.id)}
@@ -130,16 +132,19 @@ export function AuditQueuePage({ title, description }: PageProps) {
                     opacity: leaving ? 0.15 : 1, transition: 'opacity 0.35s ease',
                   }}
                 >
-                  {item.coverUrl ? (
-                    <Image src={item.coverUrl} alt={item.title || '作品封面'} width={96} height={96} style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                  {contentUrl ? (
+                    <Image src={contentUrl} alt={item.styleName || '作品'} width={96} height={96} style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 96, height: 96, borderRadius: 8, background: '#f5f5f5', flexShrink: 0 }}>🖼</div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Typography.Text strong style={{ fontSize: 15 }}>{item.title || '未命名作品'}</Typography.Text>
+                    <Space size={8}>
+                      <Typography.Text strong style={{ fontSize: 15 }}>{item.styleName || '未命名作品'}</Typography.Text>
+                      <Tag>{item.type === 'VIDEO' ? '视频' : '图文'}</Tag>
+                    </Space>
                     <div style={{ marginTop: 4 }}>
                       <Typography.Text type="secondary">
-                        提交人：{item.submitterName || '匿名'}（{item.storeName || '-'}） · {formatTime(item.submittedAt)}
+                        作者 ID：{String(item.userId)} · 提交于 {formatTime(item.updatedAt)}
                       </Typography.Text>
                     </div>
                     {caption && (

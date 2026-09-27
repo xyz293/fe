@@ -1,16 +1,16 @@
-import { Form, Input, Modal } from 'antd';
+import { Form, Input, Modal, Typography } from 'antd';
 import { useEffect } from 'react';
-import type { AuditWorkItem } from '@xiaoa/share/types';
+import type { AiWork } from '@xiaoa/share/types';
 
 interface RejectModalProps {
   open: boolean;
-  work: AuditWorkItem | null;
+  work: AiWork | null;
   confirmLoading: boolean;
   onCancel: () => void;
   onOk: (opinion: string) => void;
 }
 
-/** 驳回弹窗：意见必填，字数上限 200 */
+/** 驳回弹窗（文档 §2.4.2）：opinion 必填、字数上限 512，驳回后给作者发站内信 */
 export function RejectModal({ open, work, confirmLoading, onCancel, onOk }: RejectModalProps) {
   const [form] = Form.useForm<{ opinion: string }>();
 
@@ -25,7 +25,7 @@ export function RejectModal({ open, work, confirmLoading, onCancel, onOk }: Reje
 
   return (
     <Modal
-      title={`驳回「${work?.title || '作品'}」`}
+      title={`驳回「${work?.styleName || work?.platform || '作品'}」`}
       open={open}
       onCancel={onCancel}
       onOk={submit}
@@ -34,18 +34,19 @@ export function RejectModal({ open, work, confirmLoading, onCancel, onOk }: Reje
       okButtonProps={{ danger: true }}
       destroyOnClose
     >
+      {work?.userInput && <Typography.Paragraph type="secondary">创作说明：{work.userInput}</Typography.Paragraph>}
       <Form form={form} layout="vertical">
         <Form.Item
           name="opinion"
           label="驳回意见（作者可见，将用于改稿重提）"
           rules={[
             { required: true, message: '请填写驳回意见' },
-            { max: 200, message: '驳回意见不能超过 200 字' },
+            { max: 512, message: '驳回意见不能超过 512 字' },
           ]}
         >
           <Input.TextArea
             rows={4}
-            maxLength={200}
+            maxLength={512}
             showCount
             placeholder="说明驳回原因，例如：文案含“最低价”等违禁词，请调整后重新提交"
           />

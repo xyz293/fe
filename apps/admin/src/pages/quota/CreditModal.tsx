@@ -63,7 +63,7 @@ export function CreditModal({ open, account, onClose, onSuccess }: CreditModalPr
       <Typography.Paragraph type="secondary">
         目标账户：{account ? `#${account.id}（${account.level === 'TENANT' ? '租户池' : '门店账户'}）` : '-'}，当前余额 {formatQuota(account?.balance ?? 0)} 额度。
       </Typography.Paragraph>
-      <Form form={form} layout="vertical" onFinish={(values) => void submit(bizId || genBizId(), values)}>
+      <Form form={form} layout="vertical" onFinish={(values) => void submit(values.bizId?.trim() || bizId || genBizId(), values)}>
         <Form.Item
           name="amount"
           label="充值额度"

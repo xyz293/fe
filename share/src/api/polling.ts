@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AsyncTask, RequestAdapter, WorkGenerationStatus, WorkStatusResponse } from './types';
+import type { AiWork, AsyncTask, RequestAdapter } from './types';
 
 export interface PollTaskOptions {
   interval?: number;
@@ -10,7 +10,7 @@ export interface PollTaskOptions {
 export interface PollWorkOptions {
   interval?: number;
   timeout?: number;
-  onProgress?: (status: WorkStatusResponse) => void;
+  onProgress?: (work: AiWork) => void;
 }
 
 export type PollingState = 'idle' | 'pending' | 'success' | 'error' | 'timeout';
@@ -89,16 +89,17 @@ export function usePolling<T>(fn: () => Promise<T>, { enabled = true, interval =
   return { state, data, error, start, stop };
 }
 
-function isTerminal(status: WorkGenerationStatus) {
-  return status === 1 || status === 2 || status === 'SUCCESS' || status === 'FAILED';
-}
-
-export async function pollWorkStatus(adapter: RequestAdapter, workId: number | string, { interval = 3000, timeout = 5 * 60 * 1000, onProgress }: PollWorkOptions = {}) {
+/**
+ * 轮询作品生成结果（AI 创作域文档 §1.4.2/§3.1/§3.2）：
+ * GET /api/work/{id} 直到 status 为 SUCCESS/FAILED；图片数秒内完成，视频后端约 30 秒一轮轮询模型，
+ * 默认 5 秒间隔 + 30 分钟超时（超 30 分钟后端判超时并自动退款）。
+ */
+export async function pollWorkStatus(adapter: RequestAdapter, workId: number | string, { interval = 5000, timeout = 30 * 60 * 1000, onProgress }: PollWorkOptions = {}) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeout) {
-    const status = await adapter.request<WorkStatusResponse>(`/work/${workId}/status`);
-    onProgress?.(status);
-    if (isTerminal(status.status)) return status;
+    const work = await adapter.request<AiWork>(`/work/${workId}`);
+    onProgress?.(work);
+    if (work.status === 'SUCCESS' || work.status === 'FAILED') return work;
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
   throw new Error('生成较慢，可稍后在作品列表查看');

@@ -6,15 +6,12 @@ import { sharedApi } from '../../utils/sharedAdapter';
 import { PUBLISH_STATUS, isCaptionEditable, normalizePublishStatus, statusToneClass } from '../../utils/workConstants';
 
 const DEFAULT_CAPTION = '一枚戒指，藏着两个人对未来的想象。新款钻戒抵达门店，欢迎来挑选属于你们的那一束光。';
+/** 轮询节奏（文档 §3.1/§3.2）：2~3 秒，超时上限 30 分钟（后端超时判失败并自动退款） */
 const POLL_INTERVAL = 3000;
-const POLL_MAX_DURATION = 5 * 60 * 1000;
+const POLL_MAX_DURATION = 30 * 60 * 1000;
 
-function isGenerationDone(status: { status: number | string }) {
-  return status.status === 1 || status.status === 2 || status.status === 'SUCCESS' || status.status === 'FAILED';
-}
-function isGenerationFailed(status: { status: number | string }) {
-  return status.status === 2 || status.status === 'FAILED';
-}
+/** local:// 是后端本地占位协议（OSS 接入前，文档 §3.5），不能当 http URL 加载 */
+function previewableUrl(url?: string | null) { return url && !url.startsWith('local://') ? url : ''; }
 
 export default function WorkDetailPage() {
   const [workId, setWorkId] = useState<LongId>('');
@@ -53,11 +50,12 @@ export default function WorkDetailPage() {
       if (!pollingActive.current) return;
       if (Date.now() - startedAt > POLL_MAX_DURATION) { pollingActive.current = false; return; }
       try {
-        const status = await sharedApi.getWorkStatus(id);
+        const latest = await sharedApi.getWork(id);
         if (!pollingActive.current) return;
-        if (!isGenerationDone(status)) { pollTimer.current = setTimeout(poll, POLL_INTERVAL); return; }
+        // 终态：SUCCESS / FAILED（生成维度状态机，文档 §1.1）
+        if (latest.status === 'PENDING') { pollTimer.current = setTimeout(poll, POLL_INTERVAL); return; }
         pollingActive.current = false;
-        if (isGenerationFailed(status)) Taro.showToast({ title: status.errorMessage || '生成失败，积分已退回', icon: 'none' });
+        if (latest.status === 'FAILED') Taro.showToast({ title: latest.failReason || '生成失败，额度已自动退回', icon: 'none' });
         void loadWork(String(id));
       } catch {
         pollingActive.current = false;
@@ -67,11 +65,11 @@ export default function WorkDetailPage() {
   };
 
   const loadWork = (id: string) => {
-    return sharedApi.getWorks(1, 50)
-      .then((result) => {
-        const found = result.list.find((item) => String(item.id) === id) || null;
-        setWork(found);
-        if (found && normalizePublishStatus(found.status) === 'NONE') startPolling(id);
+    // GET /api/work/{id} 作品详情（文档 §1.4.2，仅作品本人）
+    return sharedApi.getWork(id)
+      .then((detail) => {
+        setWork(detail);
+        if (detail.status === 'PENDING') startPolling(id);
       })
       .catch((requestError) => setError(requestError instanceof Error ? requestError.message : '作品加载失败'));
   };
@@ -96,11 +94,14 @@ export default function WorkDetailPage() {
   }, []);
 
   // ===== 状态驱动渲染：PUBLISH_STATUS 映射表决定状态条 / 按钮显隐 / 驳回意见展示 =====
-  const statusKey = normalizePublishStatus(work?.status);
+  // 生成中（status=PENDING）优先展示“生成中”；生成失败单独提示（额度已自动退回，文档 §3.3）
+  const generating = work?.status === 'PENDING';
+  const generateFailed = work?.status === 'FAILED';
+  const statusKey = generating ? 'NONE' : normalizePublishStatus(work?.publishStatus);
   const statusMeta = PUBLISH_STATUS[statusKey];
-  const captionEditable = isCaptionEditable(statusKey);
-  const caption = work?.caption || work?.summary || '';
-  const rejectOpinion = work?.rejectOpinion || work?.rejectReason || '';
+  const captionEditable = isCaptionEditable(statusKey) && !generateFailed;
+  const caption = work?.caption || '';
+  const rejectOpinion = work?.auditOpinion || '';
 
   const copyCaption = async () => {
     await Taro.setClipboardData({ data: caption || DEFAULT_CAPTION });
@@ -140,27 +141,27 @@ export default function WorkDetailPage() {
       if (!res.confirm) return;
       setRegenerating(true);
       sharedApi.regenerateWork(workId)
-        .then((result) => {
-          const newId: LongId | undefined = result.workId ?? result.taskId;
-          setWork((current) => (current ? { ...current, status: 'NONE' } : current));
+        .then(() => {
+          // regenerate 无返回体（文档 §1.4.4）：原作品 status 重置 PENDING，继续轮询同一作品
+          setWork((current) => (current ? { ...current, status: 'PENDING' } : current));
           setPublishedLocal(false);
           Taro.showToast({ title: '已重新提交生成，完成后消息通知您', icon: 'none' });
-          if (newId) startPolling(newId);
-          else void loadWork(String(workId));
+          startPolling(workId);
         })
         .catch((requestError) => Taro.showToast({ title: requestError instanceof Error ? requestError.message : '重新生成失败', icon: 'none' }))
         .finally(() => setRegenerating(false));
     });
   };
 
-  // 一键准备：复制文案 + 内容图/视频存相册
+  // 一键准备：复制文案 + 内容图/视频存相册（local:// 占位地址不可保存，跳过）
   const preparePublish = async () => {
     try { await Taro.setClipboardData({ data: caption || DEFAULT_CAPTION }); } catch { /* 剪贴板失败不阻断 */ }
-    if (work?.type === 'VIDEO' && work?.contentUrl) {
-      try { await Taro.saveVideoToPhotosAlbum({ filePath: work.contentUrl }); Taro.showToast({ title: '文案已复制、视频已存相册', icon: 'success' }); }
+    const assetUrl = previewableUrl(work?.contentUrl);
+    if (work?.type === 'VIDEO' && assetUrl) {
+      try { await Taro.saveVideoToPhotosAlbum({ filePath: assetUrl }); Taro.showToast({ title: '文案已复制、视频已存相册', icon: 'success' }); }
       catch { Taro.showToast({ title: '文案已复制；视频保存失败，请在发布时上传', icon: 'none' }); }
-    } else if (work?.contentUrl || work?.coverUrl) {
-      try { await Taro.saveImageToPhotosAlbum({ filePath: (work?.contentUrl || work?.coverUrl) as string }); Taro.showToast({ title: '文案已复制、素材已存相册', icon: 'success' }); }
+    } else if (assetUrl) {
+      try { await Taro.saveImageToPhotosAlbum({ filePath: assetUrl }); Taro.showToast({ title: '文案已复制、素材已存相册', icon: 'success' }); }
       catch { Taro.showToast({ title: '文案已复制；素材保存失败，请在设置中授权相册', icon: 'none' }); }
     } else {
       Taro.showToast({ title: '文案已复制', icon: 'success' });
@@ -207,20 +208,22 @@ export default function WorkDetailPage() {
     }
   };
 
-  const previewUrl = work?.contentUrl || work?.coverUrl;
+  const previewUrl = previewableUrl(work?.contentUrl);
 
   return (
     <View className="page">
-      <View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">作品详情</Text><Text className="chat-scene">{statusMeta.label}</Text></View>
+      <View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">作品详情</Text><Text className="chat-scene">{generateFailed ? '生成失败' : statusMeta.label}</Text></View>
       <View className="detail-preview">
         {previewUrl && work?.type === 'VIDEO' ? <Video className="detail-media" src={previewUrl} controls /> : previewUrl ? <Image className="detail-media" src={previewUrl} mode="widthFix" /> : '💍'}
       </View>
       <View className="card">
         <View className="row-between">
-          <Text className="page-title" style={{ fontSize: '36px' }}>{work?.title || '作品详情'}</Text>
-          <Text className={`status-tag ${statusToneClass(statusMeta.tone)}`} style={{ marginTop: 0 }}>{statusMeta.label}</Text>
+          <Text className="page-title" style={{ fontSize: '36px' }}>{work?.styleName || '作品详情'}</Text>
+          <Text className={`status-tag ${statusToneClass(statusMeta.tone)}`} style={{ marginTop: 0 }}>{generateFailed ? '生成失败' : statusMeta.label}</Text>
         </View>
         {error && <Text className="muted" style={{ display: 'block', marginTop: '12px' }}>{error}</Text>}
+        {generateFailed && <Text className="muted" style={{ display: 'block', marginTop: '12px', color: '#a34c4c' }}>{work?.failReason || '生成失败'} · 消耗额度已自动退回，可重新生成</Text>}
+        {generating && <Text className="muted" style={{ display: 'block', marginTop: '12px' }}>生成中，完成后消息通知您，可稍后回来刷新</Text>}
         <Text className="section-title" style={{ fontSize: '28px' }}>配套文案</Text>
         <Text className="detail-copy">{caption || '暂无作品文案'}</Text>
         <View className="row-between" style={{ marginTop: '14px' }}>
