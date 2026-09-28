@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AiWork } from '@xiaoa/share/types';
 import { sharedApi } from '../../utils/sharedAdapter';
 import { track } from '../../services/track';
+import { previewableUrl } from '../../utils/media';
 
 type AIGenerationType = 'IMAGE' | 'VIDEO';
 type PollState = 'idle' | 'pending' | 'done' | 'error';
@@ -51,9 +52,11 @@ function useWorkPolling(workId: string, type: AIGenerationType) {
 
 export default function GeneratingPage() {
   const [workId, setWorkId] = useState(''); const [type, setType] = useState<AIGenerationType>('IMAGE');
+  // 任务详情/创作链路带入的关联任务，跳作品详情时透传（发布核销需要）
+  const [linkedTaskId, setLinkedTaskId] = useState('');
   const startedAt = useMemo(() => Date.now(), []); const reportedRef = useRef(false);
   const [tick, setTick] = useState(0);
-  useLoad((params) => { if (params.workId || params.taskId) setWorkId(params.workId || params.taskId); if (params.type === 'VIDEO') setType('VIDEO'); });
+  useLoad((params) => { if (params.workId) setWorkId(params.workId); if (params.taskId) setLinkedTaskId(params.taskId); if (params.type === 'VIDEO') setType('VIDEO'); });
   const polling = useWorkPolling(workId, type);
   const work = polling.work;
   const done = work?.status === 'SUCCESS';
@@ -63,9 +66,9 @@ export default function GeneratingPage() {
   void tick;
   const progress = done ? 100 : failed ? 0 : Math.min(95, Math.floor((Date.now() - startedAt) / 600));
   useEffect(() => { if (!reportedRef.current && workId && (done || failed)) { reportedRef.current = true; track('generate_result', { workId, success: done, duration: Date.now() - startedAt, failReason: work?.failReason }); } }, [done, failed, startedAt, work, workId]);
-  // local:// 是后端本地占位协议（OSS 接入前，文档 §3.5），不能当 http URL 加载，渲染占位提示
-  const mediaUrl = work?.contentUrl && !work.contentUrl.startsWith('local://') ? work.contentUrl : '';
-  const goWork = () => Taro.redirectTo({ url: `/pages/work-detail/index?id=${workId}` });
+  // demo:///local:// 是后端占位协议（readme §6），不能当 http URL 加载，渲染占位提示
+  const mediaUrl = previewableUrl(work?.contentUrl);
+  const goWork = () => Taro.redirectTo({ url: `/pages/work-detail/index?id=${workId}${linkedTaskId ? `&taskId=${linkedTaskId}` : ''}` });
   const retry = () => Taro.redirectTo({ url: `/pages/pro/index?type=${type === 'VIDEO' ? 'video' : 'image'}` });
   return <View className="page generating-page"><View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">生成中</Text><Text className="chat-scene">后台运行</Text></View><View className="progress-card card">{failed ? <><Text className="generation-symbol">↻</Text><Text className="page-title generation-title">生成没有完成</Text><Text className="hero-copy generation-copy">{polling.state === 'error' ? polling.error?.message || '生成较慢，可稍后在作品列表查看' : work?.failReason || '生成失败，请稍后重试'}</Text><Text className="refund-note">消耗额度已自动退回</Text><Button className="primary-button" style={{ marginTop: '30px' }} onClick={retry}>重新生成</Button><Button className="secondary-button" style={{ marginTop: '16px' }} onClick={() => Taro.switchTab({ url: '/pages/works/index' })}>返回作品列表</Button></> : done ? <><Text className="generation-symbol success-symbol">✓</Text><Text className="page-title generation-title">生成完成</Text>{mediaUrl && (type === 'VIDEO' ? <Video className="generation-media" src={mediaUrl} controls /> : <Image className="generation-media" src={mediaUrl} mode="widthFix" />)}{work?.contentUrl && !mediaUrl && <Text className="muted" style={{ display: 'block', fontSize: '22px' }}>成品已就绪，图库接入 OSS 后即可预览</Text>}<Text className="hero-copy generation-copy">成品已经准备好，可以继续发布打卡或打开作品详情。</Text><Button className="primary-button" onClick={goWork}>查看作品</Button></> : <><View className="ai-breath"><Text>✦</Text><Text>AI 创作中…</Text><Text>✦</Text></View><Text className="page-title generation-title">正在把你的灵感变成成品</Text><Text className="hero-copy generation-copy">{type === 'VIDEO' ? '视频生成约需 1 分钟，离开页面也不会取消任务。' : '预计 1 分钟内完成，离开页面也不会取消任务。'}</Text><View className="progress-track"><View className="progress-fill" style={{ width: `${progress}%` }} /></View><Text className="muted" style={{ fontSize: '23px' }}>{progress ? `已完成 ${progress}%` : '正在准备素材和创作方案'}</Text><Button className="secondary-button" style={{ marginTop: '34px' }} onClick={() => Taro.switchTab({ url: '/pages/works/index' })}>返回作品列表</Button></>}</View>{polling.error && polling.state === 'error' && <View className="notice-bar"><Text>{polling.error.message}</Text></View>}<Text className="muted generation-id">作品 ID：{workId}</Text></View>;
 }

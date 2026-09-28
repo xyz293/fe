@@ -196,11 +196,11 @@ export default function ChatPage() {
     Taro.setClipboardData({ data: text }).then(() => Taro.showToast({ title: tip, icon: 'success' }));
   };
 
-  /** 去配图：带会话跳专业模式（desc 预填 + chatSessionId 透传，生成后回填 caption，文档 §2.6） */
+  /** 去配图：带会话跳专业模式（desc 预填 + chatSessionId 透传，生成后回填 caption，文档 §2.6）；关联任务时透传 taskId，发布核销用 */
   const goProWithDesc = (variant: ChatCopyVariant) => {
     Taro.setStorageSync(CHAT_DESC_KEY, variant.content);
     if (session) Taro.setStorageSync(CHAT_SESSION_KEY, String(session.id));
-    Taro.navigateTo({ url: '/pages/pro/index?fromChat=1' });
+    Taro.navigateTo({ url: `/pages/pro/index?fromChat=1${taskId ? `&taskId=${taskId}` : ''}` });
   };
 
   /** 按住说话：onRecognize 实时上屏，松手后最终文本填输入框（用户可改再发送） */

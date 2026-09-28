@@ -1,11 +1,13 @@
-import { Button, Input, Text, Textarea, View } from '@tarojs/components';
+import { Button, Image, Input, Text, Textarea, View } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
 import { useEffect, useMemo, useState } from 'react';
-import type { AssetItem, GenerateWorkRequest } from '@xiaoa/share/types';
-import { sharedApi } from '../../utils/sharedAdapter';
+import type { AssetItem, GenerateWorkRequest, StyleOption } from '@xiaoa/share/types';
+import { quotaApi, sharedApi } from '../../utils/sharedAdapter';
 import { track } from '../../services/track';
 import { QUOTA_INSUFFICIENT_CODE, QUOTA_INSUFFICIENT_TIP } from '../../utils/quotaConstants';
 import { isAsrSupported, startAsr, stopAsr } from '../../utils/asr';
+import { rememberWorkId } from '../../utils/workIndex';
+import { mediaFallbackIcon, previewableUrl } from '../../utils/media';
 
 /** 「去配图」从对话模式带入的预填文案与关联会话 ID（与 pages/chat 的存储 key 一致） */
 const CHAT_DESC_KEY = 'xiaoa_chat_link_desc';
@@ -14,27 +16,20 @@ const CHAT_SESSION_KEY = 'xiaoa_chat_session_id';
 type LongId = number | string;
 type AIGenerationType = 'IMAGE' | 'VIDEO';
 interface CreationStyle { id: LongId; name: string; hot?: number | boolean; }
-interface CreationConfig { styles: CreationStyle[]; platforms: Array<{ value: string; label: string }>; imagePrice: number; videoPrice: number; quota: { balance: number; total: number; used: number }; auditRequired: boolean; refAssetLimit?: number; }
-/** 合规拦截错误码（AI 创作域文档 §1.4.1：命中 level=2 合规词直接拒绝，报 4001） */
+/** 合规拦截错误码（readme §4.13：命中 level=2 合规词直接拒绝，报 4001） */
 const COMPLIANCE_REJECTED_CODE = 4001;
 type AssetScope = 'BRAND' | 'STORE';
-type PickedAsset = Pick<AssetItem, 'id'>;
+/** 已选素材：图库/相册上传的是完整 AssetItem；从图库页带入的只有 id（渲染时 content/type 可选） */
+type PickedAsset = Pick<AssetItem, 'id'> & Partial<Pick<AssetItem, 'content' | 'type' | 'name'>>;
 
-const CONFIG_CACHE_KEY = 'xiaoa_creation_config';
-const CONFIG_CACHE_TTL = 10 * 60 * 1000;
-const fallbackConfig: CreationConfig = {
-  styles: [{ id: 1, name: '轻奢', hot: 1 }, { id: 2, name: '婚庆', hot: 1 }, { id: 3, name: '国风' }, { id: 4, name: '日常' }],
-  platforms: [{ value: 'DOUYIN', label: '抖音' }, { value: 'MEITUAN', label: '美团' }, { value: 'MOMENTS', label: '朋友圈' }],
-  imagePrice: 5,
-  videoPrice: 20,
-  quota: { balance: 0, total: 0, used: 0 },
-  auditRequired: false,
-  refAssetLimit: 9,
-};
-
-interface CachedConfig { expiresAt: number; data: CreationConfig; }
-function readCachedConfig() { const cached = Taro.getStorageSync(CONFIG_CACHE_KEY) as CachedConfig | undefined; return cached && cached.expiresAt > Date.now() ? cached.data : null; }
-function saveCachedConfig(data: CreationConfig) { Taro.setStorageSync(CONFIG_CACHE_KEY, { expiresAt: Date.now() + CONFIG_CACHE_TTL, data }); }
+/** 风格数据源：GET /api/admin/styles（readme §4.7，流程二生成前拉取），拉取失败/无权限时用内置兑底 */
+const FALLBACK_STYLES: CreationStyle[] = [{ id: 1, name: '轻奢', hot: 1 }, { id: 2, name: '婚庆', hot: 1 }, { id: 3, name: '国风' }, { id: 4, name: '日常' }];
+/** 发布平台取值与任务/发布核验一致（readme §4.15 platform 示例为「朋友圈」这类中文名） */
+const FALLBACK_PLATFORMS = [{ value: '朋友圈', label: '朋友圈' }, { value: '抖音', label: '抖音' }, { value: '小红书', label: '小红书' }, { value: '视频号', label: '视频号' }];
+/** 文档未提供价格接口，展示用固定价；实际扣费以后端为准（readme §4.13） */
+const IMAGE_PRICE = 5;
+const VIDEO_PRICE = 20;
+const REF_ASSET_LIMIT = 9;
 function parseRefIds(value?: string) { return value ? value.split(',').map((item) => item.trim()).filter(Boolean) : []; }
 // C 端图库分类（一期硬编码常用分类，后端分类接口就绪后改为拉取）
 const ASSET_CATEGORIES = ['全部', '商品图', '场景图', '模板'];
@@ -51,15 +46,16 @@ function splitByScope(list: AssetItem[]): { brand: AssetItem[]; store: AssetItem
 }
 
 export default function ProPage() {
-  const [config, setConfig] = useState<CreationConfig>(() => readCachedConfig() || fallbackConfig);
-  const [styleId, setStyleId] = useState<LongId>(config.styles[0]?.id || '');
-  const [platform, setPlatform] = useState(config.platforms[0]?.value || 'MOMENTS');
+  const [styles, setStyles] = useState<CreationStyle[]>(FALLBACK_STYLES);
+  const [styleId, setStyleId] = useState<LongId>(FALLBACK_STYLES[0].id);
+  const [platform, setPlatform] = useState(FALLBACK_PLATFORMS[0].value);
   const [productName, setProductName] = useState('');
   const [userInput, setUserInput] = useState('');
   const [selectedAssets, setSelectedAssets] = useState<PickedAsset[]>([]);
   const [type, setType] = useState<AIGenerationType>('IMAGE');
   const [loading, setLoading] = useState(false);
-  const [loadingConfig, setLoadingConfig] = useState(false);
+  // 实时余额（readme §4.17：GET /api/quota/my，STAFF→员工账户 / OWNER→门店账户）
+  const [quotaBalance, setQuotaBalance] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   // 素材选择器：品牌图库 / 本店图库 / 相册上传（即传即用）
@@ -77,6 +73,8 @@ export default function ProPage() {
   // 对话模式带来的关联文案与会话 ID（生成请求透传 chatSessionId，成功后用选定文案回填 caption，文档 §2.6）
   const [linkedDesc, setLinkedDesc] = useState('');
   const [linkedSessionId, setLinkedSessionId] = useState<string>('');
+  // 任务详情页带入的关联任务（生成成功后沿 generating → work-detail 透传，发布核销需要）
+  const [linkedTaskId, setLinkedTaskId] = useState('');
 
   useLoad((params) => {
     if (params.type === 'video') setType('VIDEO');
@@ -90,13 +88,25 @@ export default function ProPage() {
       setLinkedDesc(linked);
     }
     if (params.fromChat) setLinkedSessionId(String(Taro.getStorageSync(CHAT_SESSION_KEY) || ''));
+    if (params.taskId) setLinkedTaskId(params.taskId);
   });
-  useEffect(() => { const cached = readCachedConfig(); if (cached) { setConfig(cached); return; } setLoadingConfig(true); sharedApi.getCreationConfig().then((result) => { setConfig(result); saveCachedConfig(result); setStyleId(result.styles[0]?.id || ''); setPlatform(result.platforms[0]?.value || ''); }).catch((requestError) => setError(requestError instanceof Error ? requestError.message : '创作配置加载失败')).finally(() => setLoadingConfig(false)); }, []);
-  useEffect(() => { if (!styleId && config.styles[0]) setStyleId(config.styles[0].id); if (!platform && config.platforms[0]) setPlatform(config.platforms[0].value); }, [config, platform, styleId]);
-  const selectedStyle = useMemo(() => config.styles.find((style) => String(style.id) === String(styleId)), [config.styles, styleId]);
-  const price = type === 'VIDEO' ? config.videoPrice : config.imagePrice;
-  const assetLimit = config.refAssetLimit ?? 9;
-  const canSubmit = Boolean(styleId && platform && !loading && !loadingConfig);
+  // readme §4.7/流程二：生成前拉风格选择器数据；管理角色受限或空列表时静默保持内置兑底
+  useEffect(() => {
+    sharedApi.getStyleOptions()
+      .then((list: StyleOption[]) => {
+        const usable = list.filter((style) => style.status === undefined || style.status === 1);
+        if (usable.length) setStyles(usable);
+      })
+      .catch(() => undefined);
+    // readme §4.17：我的额度实时余额（STAFF→员工账户 / OWNER→门店 / 管理层→租户池）
+    quotaApi.getMyQuota().then((my) => setQuotaBalance(my.account?.balance ?? null)).catch(() => undefined);
+  }, []);
+  // 拉回风格后若当前选中项不在列表里，默认选第一个
+  useEffect(() => { if (!styles.some((style) => String(style.id) === String(styleId)) && styles[0]) setStyleId(styles[0].id); }, [styles, styleId]);
+  const selectedStyle = useMemo(() => styles.find((style) => String(style.id) === String(styleId)), [styles, styleId]);
+  const price = type === 'VIDEO' ? VIDEO_PRICE : IMAGE_PRICE;
+  const assetLimit = REF_ASSET_LIMIT;
+  const canSubmit = Boolean(styleId && platform && !loading);
   const pickerAssets = assetTab === 'BRAND' ? brandAssets : storeAssets;
 
   const removeAsset = (id: LongId) => setSelectedAssets((current) => current.filter((item) => String(item.id) !== String(id)));
@@ -209,6 +219,8 @@ export default function ProPage() {
       const result = await sharedApi.generate(payload);
       const id = result?.id;
       if (!id) throw new Error('生成任务创建失败，请稍后重试');
+      // readme §4.13 无作品列表接口：生成成功即登记本地索引，供「我的作品」页组装
+      rememberWorkId(id);
       track('generate_complete', { workId: id, type, success: true, duration: Date.now() - startedAt });
       // 对话模式「去配图」：把对话选定文案回填为作品配套文案（作品不再自动生成成套文案，文档 §2.6）；尽力而为不阻断跳转
       if (linkedDesc) {
@@ -216,7 +228,8 @@ export default function ProPage() {
       }
       // 已进入生成流程，清除对话关联文案，避免下次进入误预填（会话保留，可回对话页继续微调）
       Taro.removeStorageSync(CHAT_DESC_KEY);
-      Taro.navigateTo({ url: `/pages/generating/index?workId=${id}&type=${type}` });
+      // 透传关联任务：generating → work-detail 用于 judgeType 凭证判定与发布核销
+      Taro.navigateTo({ url: `/pages/generating/index?workId=${id}&type=${type}${linkedTaskId ? `&taskId=${linkedTaskId}` : ''}` });
     } catch (requestError) {
       track('generate_complete', { type, success: false, duration: Date.now() - startedAt });
       const code = (requestError as Error & { code?: number })?.code;
@@ -235,7 +248,7 @@ export default function ProPage() {
 
   return (
     <View className="page creation-page">
-      <View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">创作</Text><Text className="chat-scene">{config.auditRequired ? '提交审核' : '直接发布'}</Text></View>
+      <View className="chat-header"><Text className="back-button" onClick={() => Taro.navigateBack()}>‹</Text><Text className="chat-title">创作</Text><Text className="chat-scene">AI 生成</Text></View>
       {/* 创作页顶部模式切换：对话模式在 tabBar 创作页，需 switchTab 返回 */}
       <View className="creation-type-row" style={{ padding: '0 20px' }}>
         <Text className="pill" onClick={() => Taro.switchTab({ url: '/pages/chat/index' })}>💬 对话模式</Text>
@@ -246,10 +259,10 @@ export default function ProPage() {
         <Text className="section-title" style={{ marginTop: 0 }}>类型</Text>
         <View className="creation-type-row"><Text className={type === 'IMAGE' ? 'pill active' : 'pill'} onClick={() => setType('IMAGE')}>图片</Text><Text className={type === 'VIDEO' ? 'pill active' : 'pill'} onClick={() => setType('VIDEO')}>视频</Text></View>
         <Text className="section-title">📱 发平台</Text>
-        <View className="creation-chips">{config.platforms.map((item) => <Text className={platform === item.value ? 'pill active' : 'pill'} key={item.value} onClick={() => setPlatform(item.value)}>{item.label}</Text>)}</View>
+        <View className="creation-chips">{FALLBACK_PLATFORMS.map((item) => <Text className={platform === item.value ? 'pill active' : 'pill'} key={item.value} onClick={() => setPlatform(item.value)}>{item.label}</Text>)}</View>
         <Text className="section-title">🎨 选风格</Text>
         <View className="creation-chips">
-          {config.styles.map((style) => (
+          {styles.map((style) => (
             <Text className={String(style.id) === String(styleId) ? 'pill active' : 'pill'} key={String(style.id)} onClick={() => setStyleId(style.id)}>
               {style.name}{Boolean(style.hot) && <Text className="hot-badge">🔥热门</Text>}
             </Text>
@@ -259,8 +272,8 @@ export default function ProPage() {
         <View className="asset-grid">
           {selectedAssets.map((asset, index) => (
             <View className="asset-cell" key={String(asset.id)}>
-              {/* content 当前为 local:// 占位协议（文档 §4.4），不能当 http URL 加载，先渲染占位图 */}
-              <View className="asset-thumb" />
+              {/* content 为 demo:///local:// 占位协议时（readme §6）不能当图片加载，渲染类型占位 */}
+              {previewableUrl(asset.content) ? <Image className="asset-thumb" src={previewableUrl(asset.content)} mode="aspectFill" /> : <View className="asset-thumb" />}
               <Text className="asset-order">{index + 1}</Text>
               <Text className="asset-cell-remove" onClick={() => removeAsset(asset.id)}>×</Text>
             </View>
@@ -286,11 +299,11 @@ export default function ProPage() {
           )}
         </Text>
         <Textarea className="caption-editor-textarea" value={userInput} maxlength={300} placeholder="输入节日、场合和想表达的感觉..." onInput={(event) => setUserInput(event.detail.value)} />
-        <View className="creation-cost"><Text>💰 图文 {config.imagePrice} 积分 / 视频 {config.videoPrice} 积分</Text><Text>本店余额：{config.quota.balance.toLocaleString()}</Text></View>
+        <View className="creation-cost"><Text>💰 图文 {IMAGE_PRICE} 积分 / 视频 {VIDEO_PRICE} 积分</Text><Text>我的额度：{quotaBalance === null ? '—' : quotaBalance.toLocaleString()}</Text></View>
       </View>
       {error && <View className="notice-bar"><Text>{error}</Text></View>}
       <Text className="cost-note">本次预计消耗 {price} 积分 · 生成失败自动退回</Text>
-      <Button className="primary-button" loading={loading} disabled={!canSubmit} onClick={generate}>{loading ? '生成中，完成后消息通知您' : config.auditRequired ? '提交审核并生成' : '开始生成'}</Button>
+      <Button className="primary-button" loading={loading} disabled={!canSubmit} onClick={generate}>{loading ? '生成中，完成后消息通知您' : '开始生成'}</Button>
 
       {showPicker && (
         <>
@@ -310,6 +323,7 @@ export default function ProPage() {
             <View className="asset-picker-grid">
               {pickerAssets.map((asset) => {
                 const order = selectedAssets.findIndex((item) => String(item.id) === String(asset.id));
+                const thumbUrl = previewableUrl(asset.content);
                 return (
                   <View
                     className={order >= 0 ? 'asset-pick-cell selected' : 'asset-pick-cell'}
@@ -317,8 +331,9 @@ export default function ProPage() {
                     onClick={() => toggleAsset(asset)}
                     onLongPress={assetTab === 'STORE' ? () => recommendToBrand(asset) : undefined}
                   >
-                    {/* content 当前为 local:// 占位协议（文档 §4.4），不能当 http URL 加载，先渲染占位图 */}
-                    <View className="asset-pick-thumb" />
+                    {/* content 为 demo:///local:// 占位协议时（readme §6）不能当图片加载，渲染类型占位 */}
+                    {thumbUrl ? <Image className="asset-pick-thumb" src={thumbUrl} mode="aspectFill" /> : <View className="asset-pick-thumb"><Text style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: '48px' }}>{mediaFallbackIcon(asset.type)}</Text></View>}
+                    <Text style={{ display: 'block', marginTop: '6px', fontSize: '20px', color: '#6f5550', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{asset.name || '未命名素材'}</Text>
                     {order >= 0 && <Text className="asset-pick-mark">{order + 1}</Text>}
                   </View>
                 );

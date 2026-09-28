@@ -2,7 +2,6 @@ import type {
   AdminMemberListQuery,
   AdminTaskReport,
   AiWork,
-  AsyncTask,
   AuthJoinRequest,
   AuthJoinResult,
   AuthLoginRequest,
@@ -14,7 +13,6 @@ import type {
   BadgeQuery,
   ChatReply,
   ChatReviseRequest,
-  ChatResult,
   ChatSession,
   ChatSessionDetail,
   ComplianceWord,
@@ -28,7 +26,6 @@ import type {
   CreateStoreRequest,
   CreateStyleRequest,
   CreateTaskRequest,
-  CreationConfig,
   DashboardOverview,
   DashboardTrendPoint,
   ExportTask,
@@ -45,7 +42,6 @@ import type {
   UpdateStoreParentRequest,
   UpdateStyleRequest,
   UserAccount,
-  Quota,
   RankingItem,
   RankingQuery,
   RemindTaskRequest,
@@ -76,7 +72,6 @@ import type {
   OrgNode,
   Task,
   TaskModifyLog,
-  TaskSummary,
   TaskStatusRequest,
   UpdateTaskRequest,
   User,
@@ -108,8 +103,6 @@ export function createApi(adapter: RequestAdapter) {
     disableUser: (userId: number | string) => request<void>(`/users/${userId}/disable`, { method: 'PATCH' }),
     grantUserRole: (userId: number | string, data: GrantUserRoleRequest) => request<void>(`/users/${userId}/roles`, { method: 'PUT', data }),
     updateUserRole: (roleId: number | string, data: UpdateUserRoleRequest) => request<void>(`/users/roles/${roleId}`, { method: 'PATCH', data }),
-    getQuota: () => request<Quota>('/quota'),
-    getTaskSummary: () => request<TaskSummary>('/task-summary'),
     getMyTasks: () => request<Task[]>('/task/my'),
     getTask: (taskId: number | string) => request<Task>(`/task/${taskId}`),
     createTask: (data: CreateTaskRequest) => request<Task>('/task', { method: 'POST', data }),
@@ -133,7 +126,6 @@ export function createApi(adapter: RequestAdapter) {
       const query = Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
       return request<Badge[]>(`/task/badges${query ? `?${query}` : ''}`);
     },
-    chat: (message: string, taskId?: number | string) => request<ChatResult>('/chat', { method: 'POST', data: { message, ...(taskId ? { taskId } : {}), industry: 'jewelry-marriage' } }),
     // ===== 对话模式（员工额度 & 对话模式文档 §2：引导式聊天创作，提示词全隐藏） =====
     /** POST /api/chat/sessions 创建会话（scene 必填 ≤32 字符：朋友圈/小红书/视频号等） */
     createChatSession: (data: CreateChatSessionRequest) => request<ChatSession>('/chat/sessions', { method: 'POST', data }),
@@ -145,12 +137,14 @@ export function createApi(adapter: RequestAdapter) {
     sendChatMessage: (sessionId: number | string, text: string) => request<ChatReply>(`/chat/sessions/${sessionId}/messages`, { method: 'POST', data: { text } }),
     /** POST /api/chat/sessions/{id}/revise 微调指定版本（扣 1 点；响应 versions 仅一版新文案；错误：1001 无可微调/超范围 / 1000 LLM 失败稍后重试） */
     reviseChat: (sessionId: number | string, data: ChatReviseRequest) => request<ChatReply>(`/chat/sessions/${sessionId}/revise`, { method: 'POST', data }),
-    getCreationConfig: () => request<CreationConfig>('/creation/config'),
     /** POST /api/work/generate 发起生成（AI 创作域文档 §1.4.1，返回 status=PENDING 的作品；错误：1001/1002/4001/1000/3001） */
     generate: (data: GenerateWorkRequest) => request<AiWork>('/work/generate', { method: 'POST', data }),
-    /** GET /api/work/{id} 作品详情（轮询用，仅作品本人，AI 创作域文档 §1.4.2） */
+    /** GET /api/work/{id} 作品详情（轮询用，仅作品本人，AI 创作域文档 §1.4.2；文档无作品列表接口，前端用本地索引 + 本接口组装列表） */
     getWork: (workId: number | string) => request<AiWork>(`/work/${workId}`),
-    getAsyncTask: (taskId: string) => request<AsyncTask>(`/task/${taskId}`),
+    /** PUT /api/work/{id}/caption 修改配套文案（仅 DRAFT/APPROVED/REJECTED 可改，REJECTED 改稿自动重提审，readme §4.13） */
+    updateWorkCaption: (workId: number | string, caption: string) => request<void>(`/work/${workId}/caption`, { method: 'PUT', data: { caption } }),
+    /** POST /api/work/{id}/regenerate 重新生成（按旧任务价格全额重新扣费，作品回到生成中，readme §4.13） */
+    regenerateWork: (workId: number | string) => request<void>(`/work/${workId}/regenerate`, { method: 'POST' }),
     /** GET /api/admin/prompt-template 提示词模板全部版本（AI 创作域文档 §1.5.2，按 scene,version 倒序；当前生效取 status=1） */
     getPromptTemplates: () => request<PromptTemplate[]>('/admin/prompt-template'),
     /** PUT /api/admin/prompt-template 保存模板（仅 HQ_ADMIN；id=null 新增版本，同 scene 旧版本全部停用） */
@@ -159,8 +153,11 @@ export function createApi(adapter: RequestAdapter) {
     rollbackPromptTemplate: (templateId: number | string) => request<void>(`/admin/prompt-template/${templateId}/rollback`, { method: 'PUT' }),
     /** GET /api/admin/media-task/list 生成任务列表（AI 创作域文档 §1.5.1，运维视角，按时间倒序；limit 默认 50，超出 1~200 自动截断） */
     getMediaTasks: (limit = 50) => request<MediaTask[]>(`/admin/media-task/list?limit=${limit}`),
-    getWorks: (pageNo = 1, pageSize = 20) => request<PageResult<Work>>('/works', { data: { pageNo, pageSize, industry: 'jewelry-marriage' } }),
     publishRecord: (data: PublishRecord) => request<void>('/publish-record', { method: 'POST', data }),
+
+    // ===== 平台端（readme §4.18 仅收录 auth/login、payment register/confirm/cancel 四个接口；
+    // 以下 dashboard/tenant/plan/customer 接口为前端先行页面，后端 89 个接口中暂无，页面均已做失败降级，接入后移除本标注） =====
+    /** GET /platform/dashboard（readme §4.18 未收录，后端暂无） */
     getPlatformDashboard: (period: PlatformPeriod = 'month') => request<PlatformDashboard>(`/platform/dashboard?period=${encodeURIComponent(period)}`),
     getPlatformTenants: (params: PlatformTenantListQuery = {}) => request<PageResult<PlatformTenant>>('/platform/tenant/list', { data: params }),
     approvePlatformTenant: (data: PlatformTenantApproveRequest) => request<PlatformTenant>('/platform/tenant/approve', { method: 'POST', data }),

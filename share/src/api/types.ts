@@ -166,6 +166,7 @@ export interface UpdateUserRoleRequest {
   dataScope: DataScope;
 }
 
+/** 旧版额度接口（GET /api/quota）类型：全量文档 §4.17 未收录该接口，仅存量 store 状态引用；现用 /quota/my（MyQuota） */
 export interface Quota {
   balance: number;
   total: number;
@@ -176,20 +177,6 @@ export interface TaskSummary {
   pending: number;
   completed: number;
   overdue: number;
-}
-
-export type AsyncTaskStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED';
-
-export interface AsyncTask {
-  taskId: string;
-  status: AsyncTaskStatus;
-  progress?: number;
-  result?: { workId: string };
-  errorMessage?: string;
-}
-
-export interface ChatResult {
-  versions: string[];
 }
 
 // ---- 对话模式（引导式聊天创作 /api/chat/sessions，文档 §2）：AI 追问补齐要素，一次出 3 版文案，提示词全隐藏 ----
@@ -286,30 +273,6 @@ export interface ChatMessage {
 }
 
 export type AIGenerationType = 'IMAGE' | 'VIDEO';
-
-export interface CreationStyleOption {
-  id: LongId;
-  name: string;
-  code?: string;
-  description?: string;
-  /** 热门风格（创作页🔥角标） */
-  hot?: number | boolean;
-}
-
-export interface CreationPlatformOption {
-  value: string;
-  label: string;
-}
-
-export interface CreationConfig {
-  styles: CreationStyleOption[];
-  platforms: CreationPlatformOption[];
-  imagePrice: number;
-  videoPrice: number;
-  quota: Quota;
-  auditRequired: boolean;
-  refAssetLimit?: number;
-}
 
 /** POST /api/work/generate 请求体（AI 创作域文档 §1.4.1） */
 export interface GenerateWorkRequest {

@@ -3,6 +3,7 @@ import Taro, { useLoad } from '@tarojs/taro';
 import { useEffect, useRef, useState } from 'react';
 import type { LongId, PublishRecord, Work } from '@xiaoa/share/types';
 import { sharedApi } from '../../utils/sharedAdapter';
+import { previewableUrl } from '../../utils/media';
 import { PUBLISH_STATUS, isCaptionEditable, normalizePublishStatus, statusToneClass } from '../../utils/workConstants';
 
 const DEFAULT_CAPTION = '一枚戒指，藏着两个人对未来的想象。新款钻戒抵达门店，欢迎来挑选属于你们的那一束光。';
@@ -10,8 +11,7 @@ const DEFAULT_CAPTION = '一枚戒指，藏着两个人对未来的想象。新�
 const POLL_INTERVAL = 3000;
 const POLL_MAX_DURATION = 30 * 60 * 1000;
 
-/** local:// 是后端本地占位协议（OSS 接入前，文档 §3.5），不能当 http URL 加载 */
-function previewableUrl(url?: string | null) { return url && !url.startsWith('local://') ? url : ''; }
+/** demo:///local:// 是后端占位协议（readme §6，OSS 接入前），不能当 http URL 加载；白名单判断见 utils/media */
 
 export default function WorkDetailPage() {
   const [workId, setWorkId] = useState<LongId>('');
@@ -36,7 +36,6 @@ export default function WorkDetailPage() {
 
   // 重新生成（全价扣费，二次确认）
   const [regenerating, setRegenerating] = useState(false);
-  const [prices, setPrices] = useState<{ imagePrice?: number; videoPrice?: number }>({});
 
   const pollingActive = useRef(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -89,7 +88,6 @@ export default function WorkDetailPage() {
   });
 
   useEffect(() => {
-    sharedApi.getCreationConfig().then((config) => setPrices({ imagePrice: config.imagePrice, videoPrice: config.videoPrice })).catch(() => undefined);
     return stopPolling;
   }, []);
 
@@ -97,7 +95,10 @@ export default function WorkDetailPage() {
   // 生成中（status=PENDING）优先展示“生成中”；生成失败单独提示（额度已自动退回，文档 §3.3）
   const generating = work?.status === 'PENDING';
   const generateFailed = work?.status === 'FAILED';
-  const statusKey = generating ? 'NONE' : normalizePublishStatus(work?.publishStatus);
+  const normalizedStatus = normalizePublishStatus(work?.publishStatus);
+  // 兑底：后端生成成功但 publishStatus 未流转（缺失或仍为 NONE/0）时按 DRAFT 处理（readme 状态机：DRAFT 是审核关时的默认态，可直接发布），
+  // 避免生成完成的作品在详情页发布/编辑全部被禁用
+  const statusKey = generating ? 'NONE' : work?.status === 'SUCCESS' && normalizedStatus === 'NONE' ? 'DRAFT' : normalizedStatus;
   const statusMeta = PUBLISH_STATUS[statusKey];
   const captionEditable = isCaptionEditable(statusKey) && !generateFailed;
   const caption = work?.caption || '';
@@ -129,12 +130,11 @@ export default function WorkDetailPage() {
     }
   };
 
-  // 重新生成：全价扣费，二次确认（防误点）
+  // 重新生成：按旧任务价格全额重新扣费（readme §4.13），二次确认（防误点）
   const onRegenerate = () => {
-    const price = work?.type === 'VIDEO' ? prices.videoPrice : prices.imagePrice;
     Taro.showModal({
       title: '重新生成',
-      content: price ? `将重新扣费 ${price} 额度，确定重新生成吗？` : '重新生成将重新扣费相应额度，确定吗？',
+      content: '将按原价格重新扣费相应额度，确定重新生成吗？',
       confirmText: '重新生成',
       cancelText: '再想想',
     }).then((res) => {

@@ -26,8 +26,14 @@ export default function ManageTasksPage() {
 
   const createTask = async () => {
     if (!title.trim()) return;
+    // readme §4.15：店长只能建本店任务（scope=3，targetIds=本店，即登录 orgId）
+    const orgId = String(Taro.getStorageSync('orgId') || '');
+    if (!orgId) {
+      setError('缺少门店信息，请重新登录后再试');
+      return;
+    }
     setLoading(true);
-    const data: CreateTaskRequest = { title: title.trim(), formType: 1, frequency: frequencyValue[frequencyIndex], targetScope: 3, targetIds: [], judgeType: 1 };
+    const data: CreateTaskRequest = { title: title.trim(), formType: 1, frequency: frequencyValue[frequencyIndex], targetScope: 3, targetIds: [Number(orgId)], judgeType: 1 };
     try { await sharedApi.createTask(data); setTitle(''); await loadBoard(); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : '任务创建失败'); } finally { setLoading(false); }
   };
 

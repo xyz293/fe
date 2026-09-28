@@ -1,7 +1,7 @@
 import Taro from '@tarojs/taro';
 // 额度域类型定义在 share/src/api/quota.ts，经 @xiaoa/share 主入口导出（@xiaoa/share/types 仅含 types.ts）
 import type { MyQuota, StaffQuotaTransferRequest } from '@xiaoa/share';
-import type { AdminMemberListQuery, AdminTaskReport, AiWork, AssetItem, AssetQuery, AsyncTask, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatReply, ChatResult, ChatReviseRequest, ChatSession, ChatSessionDetail, CreateChatSessionRequest, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, CreationConfig, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, Quota, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, RejectWorkRequest, StoreBoard, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TaskSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, User, UserAccount, Work } from '@xiaoa/share/types';
+import type { AdminMemberListQuery, AdminTaskReport, AiWork, AssetItem, AssetQuery, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatReply, ChatReviseRequest, ChatSession, ChatSessionDetail, CreateChatSessionRequest, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, RejectWorkRequest, StoreBoard, StyleOption, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, UserAccount } from '@xiaoa/share/types';
 
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -51,7 +51,6 @@ export const quotaApi = {
 export const sharedApi = {
   request,
   health: () => request<{ status: string }>('/health'),
-  getUser: () => request<User>('/user'),
   openTenant: (data: TenantOpenRequest) => request<TenantOpenResult>('/tenants/open', { method: 'POST', data }),
   getTenant: (tenantId: number | string) => request<TenantDetail>(`/tenants/${tenantId}`),
   // 文档 §7.3：PATCH /api/tenants/{tenantId}/renew，请求体为 JSON 字符串（如 "2027-09-23 23:59:59"），仅 HQ_ADMIN
@@ -70,8 +69,6 @@ export const sharedApi = {
   disableUser: (userId: number | string) => request<void>(`/users/${userId}/disable`, { method: 'PATCH' }),
   grantUserRole: (userId: number | string, data: GrantUserRoleRequest) => request<void>(`/users/${userId}/roles`, { method: 'PUT', data }),
   updateUserRole: (roleId: number | string, data: UpdateUserRoleRequest) => request<void>(`/users/roles/${roleId}`, { method: 'PATCH', data }),
-  getQuota: () => request<Quota>('/quota'),
-  getTaskSummary: () => request<TaskSummary>('/task-summary'),
   getMyTasks: () => request<Task[]>('/task/my'),
   getTask: (taskId: number | string) => request<Task>(`/task/${taskId}`),
   createTask: (data: CreateTaskRequest) => request<Task>('/task', { method: 'POST', data }),
@@ -95,7 +92,6 @@ export const sharedApi = {
     const query = Object.entries(params).map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
     return request<Badge[]>(`/task/badges${query ? `?${query}` : ''}`);
   },
-  chat: (message: string, taskId?: number | string) => request<ChatResult>('/chat', { method: 'POST', data: { message, ...(taskId ? { taskId } : {}) } }),
   // ===== 对话模式（员工额度 & 对话模式文档 §2：引导式聊天创作，提示词全隐藏） =====
   /** POST /api/chat/sessions 创建会话（scene 必填 ≤32 字符：朋友圈/小红书/视频号等） */
   createChatSession: (data: CreateChatSessionRequest) => request<ChatSession>('/chat/sessions', { method: 'POST', data }),
@@ -107,11 +103,10 @@ export const sharedApi = {
   sendChatMessage: (sessionId: number | string, text: string) => request<ChatReply>(`/chat/sessions/${sessionId}/messages`, { method: 'POST', data: { text } }),
   /** POST /api/chat/sessions/{id}/revise 微调指定版本（扣 1 点；响应 versions 仅一版新文案；1001 无可微调/超范围，1000 LLM 失败稍后重试） */
   reviseChat: (sessionId: number | string, data: ChatReviseRequest) => request<ChatReply>(`/chat/sessions/${sessionId}/revise`, { method: 'POST', data }),
-  getCreationConfig: () => request<CreationConfig>('/creation/config'),
   // ===== AI 创作域（《AI 创作域 & 企业管理域·前端接口文档》§1，管理端完整封装见 share/src/api/work.ts） =====
   /** POST /api/work/generate 发起生成（同步建作品+扣费+提交任务；错误：1001 参数/4001 合规拦截/1000 额度不足/3001 风格不可用） */
   generate: (data: GenerateWorkRequest) => request<AiWork>('/work/generate', { method: 'POST', data }),
-  /** GET /api/work/{id} 作品详情（轮询用，仅作品本人；建议 2~3 秒间隔，VIDEO 放宽至 5~10 秒） */
+  /** GET /api/work/{id} 作品详情（轮询用，仅作品本人；readme 文档无作品列表接口，作品页用本地索引 + 本接口组装） */
   getWork: (workId: number | string) => request<AiWork>(`/work/${workId}`),
   /** PUT /api/work/{id}/caption 修改配套文案（仅 DRAFT/APPROVED/REJECTED 可改；REJECTED 改稿成功自动回 PENDING_AUDIT 重提审） */
   updateWorkCaption: (workId: LongId, caption: string) => request<void>(`/work/${workId}/caption`, { method: 'PUT', data: { caption } }),
@@ -149,7 +144,8 @@ export const sharedApi = {
       fail: () => reject(new Error('素材上传失败，请重试')),
     });
   }),
-  getAsyncTask: (taskId: string) => request<AsyncTask>(`/task/${taskId}`),
+  /** GET /api/admin/styles 风格选项（readme §4.7：生成页风格选择器数据源；流程二生成前拉取，管理角色受限时页面走 fallback） */
+  getStyleOptions: () => request<StyleOption[]>('/admin/styles'),
   /** GET /api/admin/members 成员列表（店长「员工与角色」页用；STAFF 记录带 quotaBalance/userOrgRoleId，员工额度文档 §1.3） */
   getAdminMembers: (params: AdminMemberListQuery = {}) => {
     const query = Object.entries(params).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&');
@@ -163,6 +159,5 @@ export const sharedApi = {
   auditList: () => Promise.reject(new Error('当前端不支持该接口')),
   approveAuditWork: () => Promise.reject(new Error('当前端不支持该接口')),
   rejectAuditWork: (_id: number | string, _data: RejectWorkRequest) => Promise.reject(new Error('当前端不支持该接口')),
-  getWorks: (pageNo = 1, pageSize = 20) => request<PageResult<Work>>('/works', { data: { pageNo, pageSize } }),
   publishRecord: (data: PublishRecord) => request<void>('/publish-record', { method: 'POST', data }),
 };
