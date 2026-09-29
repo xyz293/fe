@@ -220,19 +220,28 @@ export interface ChatSessionDetail {
   messages: ChatSessionMessage[];
 }
 
-/** 对话回复动作：ASK=追问（不扣费）/ GENERATE=出稿（已扣费；扣费失败整轮不落库可直接重发） */
-export type ChatReplyAction = 'ASK' | 'GENERATE';
+/** 对话回复动作（对接文档 §3，五种）：ASK 追问 / GENERATE 出稿（三段式说明+版本）/ QUESTIONNAIRE 问卷挂起 / OPTION_CARD 选项卡挂起 / PENDING_MEDIA 异步图视频挂起 */
+export type ChatReplyAction = 'ASK' | 'GENERATE' | 'QUESTIONNAIRE' | 'OPTION_CARD' | 'PENDING_MEDIA';
 
-/** POST /api/chat/sessions/{id}/messages 与 /revise 的响应（ChatReplyVO，文档 §2.5） */
+/** POST /api/chat/sessions/{id}/messages、/answer、/option、/revise 的统一响应（ChatReplyVO，对接文档 §3） */
 export interface ChatReply {
   sessionId: LongId;
   action: ChatReplyAction;
-  /** action=ASK 时有值：AI 追问文案 */
+  /** ASK：追问文案；QUESTIONNAIRE/OPTION_CARD：挂起说明；GENERATE：三段式事实说明（含 \n 换行，✅/🎨/⚠️ 三段） */
   question?: string | null;
-  /** action=GENERATE 时有值：首次出稿 3 版，微调仅 1 版 */
+  /** action=GENERATE 时有值：新创作 3~4 版，微调仅 1 版 */
   versions?: string[] | null;
-  /** 最新要素收集状态 JSON 字符串 */
+  /** action=GENERATE 且为微调时有值：基于第几版改写 */
+  revisedFrom?: number | null;
+  /** action=QUESTIONNAIRE 时有值：1~3 题（单选） */
+  questionnaire?: ChatQuestion[] | null;
+  /** action=OPTION_CARD 时有值：A/B/C/D 增益选项，D「直接生成」必有 */
+  optionCard?: ChatOptionCard | null;
+  /** action=PENDING_MEDIA 时有值：异步作品 ID，用于轮询 GET /api/work/{id} */
+  workId?: LongId | null;
+  /** 槽位快照 JSON 字符串（可解析展示「已确认信息」，可选） */
   context?: string | null;
+  /** 本次 AI 消息 ID */
   messageId?: LongId;
 }
 
@@ -245,6 +254,37 @@ export interface CreateChatSessionRequest {
 export interface ChatReviseRequest {
   versionNo: number;
   instruction: string;
+}
+
+// ---- 对话创作 · 挂起交互契约（《对话创作模块·前端对接文档》v1.0，后端 7 节点 + 三类挂起） ----
+// 挂起恢复接口均在会话路径下：POST /api/chat/sessions/{id}/answer、/option；
+// 历史 AI 消息 content JSON 含同样结构，GET /api/chat/sessions/{id} 恢复会话时按 action 重建挂起 UI。
+
+/** 问卷题（挂起点 1）：options 自带 hint 后果说明；maxSelect 固定 1（单选）；allowAiDecide=true 时选项含「你帮我定」 */
+export interface ChatQuestion {
+  id: string;
+  slotKey: string;
+  question: string;
+  options: { key: string; label: string; hint: string }[];
+  maxSelect: number;
+  allowAiDecide: boolean;
+}
+
+/** 选项卡（挂起点 2）：D「直接生成」必有；deadlineSeconds 前端倒计时用（30s），到期禁用不发请求，后端兜底自动放行 */
+export interface ChatOptionCard {
+  options: { key: 'A' | 'B' | 'C' | 'D'; label: string; hint: string }[];
+  deadlineSeconds: number;
+}
+
+/** 问卷作答单项：value 为选中选项的 label（或自由输入文本）；未回答的题可不传（缺口下一轮问卷继续引导） */
+export interface ChatAnswerItem {
+  slotKey: string;
+  value: string;
+}
+
+/** POST /api/chat/sessions/{id}/answer 问卷作答（单轮最多 3 题；无挂起问卷时返回 1002） */
+export interface ChatAnswerRequest {
+  answers: ChatAnswerItem[];
 }
 
 // —— 前端渲染模型（由上述契约解析而来，页面统一渲染实时消息与历史消息） ——

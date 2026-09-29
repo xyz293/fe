@@ -1,7 +1,7 @@
 import Taro from '@tarojs/taro';
 // 额度域类型定义在 share/src/api/quota.ts，经 @xiaoa/share 主入口导出（@xiaoa/share/types 仅含 types.ts）
 import type { MyQuota, StaffQuotaTransferRequest } from '@xiaoa/share';
-import type { AdminMemberListQuery, AdminTaskReport, AiWork, AssetItem, AssetQuery, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatReply, ChatReviseRequest, ChatSession, ChatSessionDetail, CreateChatSessionRequest, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, RejectWorkRequest, StoreBoard, StyleOption, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, UserAccount } from '@xiaoa/share/types';
+import type { AdminMemberListQuery, AdminTaskReport, AiWork, AssetItem, AssetQuery, AuthJoinRequest, AuthJoinResult, AuthLoginRequest, AuthMe, AuthSession, AuthTakeoverRequest, Badge, BadgeQuery, ChatAnswerRequest, ChatReply, ChatReviseRequest, ChatSession, ChatSessionDetail, CreateChatSessionRequest, CreateInviteRequest, CreateOrgRequest, CreateTaskRequest, GenerateWorkRequest, GrantUserRoleRequest, Invite, LongId, OrgNode, PageResult, PublishRecord, RankingItem, RankingQuery, RemindTaskRequest, RequestOptions, RejectWorkRequest, StoreBoard, StyleOption, Task, TaskBoard, TaskBoardRecord, TaskModifyLog, TaskStatusRequest, TaskStoreSummary, TenantDetail, TenantOpenRequest, TenantOpenResult, UpdateOrgNameRequest, UpdateTaskRequest, UpdateUserRoleRequest, UserAccount } from '@xiaoa/share/types';
 
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -99,9 +99,14 @@ export const sharedApi = {
   getChatSessions: () => request<ChatSession[]>('/chat/sessions'),
   /** GET /api/chat/sessions/{id} 全量历史（重进页面恢复；AI 消息 content 为 JSON 字符串，前端需解析） */
   getChatSession: (sessionId: number | string) => request<ChatSessionDetail>(`/chat/sessions/${sessionId}`),
-  /** POST /api/chat/sessions/{id}/messages 发一句话（错误：1001 会话关闭/7 天未活跃 / 2003 他人会话 / 3001 额度不足 / 4001 违规词；3001/4001 本轮不落库可直接重发） */
+  /** POST /api/chat/sessions/{id}/messages 发一句话（返回五种 action：ASK/GENERATE/QUESTIONNAIRE/OPTION_CARD/PENDING_MEDIA，对接文档 §2.2/§3；
+   *  错误：1001 会话关闭/7 天未活跃 / 2003 他人会话 / 3001 额度不足 / 4001 违规词；3001/4001 本轮不落库可直接重发） */
   sendChatMessage: (sessionId: number | string, text: string) => request<ChatReply>(`/chat/sessions/${sessionId}/messages`, { method: 'POST', data: { text } }),
-  /** POST /api/chat/sessions/{id}/revise 微调指定版本（扣 1 点；响应 versions 仅一版新文案；1001 无可微调/超范围，1000 LLM 失败稍后重试） */
+  /** POST /api/chat/sessions/{id}/answer 问卷作答（挂起点 1 恢复；value 传选中项 label；未答题可不传；无挂起时 1002 → 刷新会话） */
+  submitChatAnswer: (sessionId: number | string, data: ChatAnswerRequest) => request<ChatReply>(`/chat/sessions/${sessionId}/answer`, { method: 'POST', data }),
+  /** POST /api/chat/sessions/{id}/option 选项卡选择（挂起点 2 恢复；body { key: 'A'|'B'|'C'|'D' }；已兜底放行时 1003 → 刷新会话拉结果） */
+  submitChatOption: (sessionId: number | string, key: 'A' | 'B' | 'C' | 'D') => request<ChatReply>(`/chat/sessions/${sessionId}/option`, { method: 'POST', data: { key } }),
+  /** POST /api/chat/sessions/{id}/revise 微调指定版本（扣 1 点；响应 versions 仅一版新文案 + revisedFrom；1001 无可微调/超范围，1000 LLM 失败稍后重试；对话框自然语言改稿亦可触发） */
   reviseChat: (sessionId: number | string, data: ChatReviseRequest) => request<ChatReply>(`/chat/sessions/${sessionId}/revise`, { method: 'POST', data }),
   // ===== AI 创作域（《AI 创作域 & 企业管理域·前端接口文档》§1，管理端完整封装见 share/src/api/work.ts） =====
   /** POST /api/work/generate 发起生成（同步建作品+扣费+提交任务；错误：1001 参数/4001 合规拦截/1000 额度不足/3001 风格不可用） */

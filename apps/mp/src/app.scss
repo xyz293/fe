@@ -115,7 +115,7 @@ page {
 .chat-title { color: #3d2a2f; font-size: 34px; font-weight: 700; }
 .chat-scene { margin-left: auto; padding: 12px 18px; border-radius: 999px; color: #8e683c; background: #fff4df; font-size: 22px; }
 .chat-flow { min-height: 690px; padding: 8px 0; }
-.bubble { max-width: 82%; padding: 20px 22px; margin: 18px 0; border-radius: 20px; font-size: 27px; line-height: 1.7; }
+.bubble { max-width: 82%; padding: 20px 22px; margin: 18px 0; border-radius: 20px; color: #5e4844; font-size: 27px; line-height: 1.7; white-space: pre-line; }
 .bubble-ai { margin-right: auto; border-top-left-radius: 6px; color: #5e4844; background: #f7eee8; }
 .bubble-user { margin-left: auto; border-top-right-radius: 6px; color: #fff; background: #b8874f; }
 .typing { color: #a78362; }
@@ -228,6 +228,33 @@ page {
 .asset-pick-cell.selected .asset-pick-thumb { border: 3px solid #c9a46c; }
 .asset-pick-mark { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; color: #fff; background: #c9a46c; font-size: 20px; }
 .asset-picker-empty { padding: 40px 0; color: #ae9890; font-size: 23px; text-align: center; }
+
+/* ===== 对话创作 · 7 节点编排卡片（问卷卡/选项卡/生成进度卡/成套结果卡，《前端技术方案》v1.0） ===== */
+.flow-card { max-width: 92%; padding: 22px; margin: 14px 0 20px; border: 1px solid #eadbd0; border-radius: 20px; background: #fffdfb; box-shadow: 0 8px 20px rgba(108, 74, 55, 0.05); }
+.flow-card-tip { display: block; margin-bottom: 14px; color: #a38d84; font-size: 22px; }
+.flow-card-note { display: block; margin-top: 14px; color: #a38d84; font-size: 21px; }
+.flow-question { margin-bottom: 18px; }
+.flow-question:last-child { margin-bottom: 0; }
+.flow-question-title { display: block; margin-bottom: 12px; color: #4b3634; font-size: 26px; font-weight: 600; }
+.flow-option-list { display: flex; flex-direction: column; gap: 12px; }
+.flow-option { padding: 16px 18px; border: 1px solid #eadbd0; border-radius: 14px; background: #fff; }
+.flow-option.active { border-color: #c9a46c; background: #fff5e4; }
+.flow-option-label { display: block; color: #4b3634; font-size: 25px; }
+.flow-option-key { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-right: 10px; border-radius: 50%; color: #fff; background: #c9a46c; font-size: 20px; }
+.flow-option-hint { display: block; margin-top: 6px; color: #a38d84; font-size: 21px; }
+.flow-submit { margin-top: 18px; padding: 19px; border-radius: 14px; color: #fff; background: linear-gradient(135deg, #c9a46c, #ad8051); text-align: center; font-size: 26px; }
+.flow-submit.disabled { opacity: 0.45; }
+.gen-card-title { display: block; margin-top: 16px; color: #4b3634; font-size: 26px; font-weight: 600; }
+.gen-card-meta { display: block; margin-top: 12px; color: #8f7770; font-size: 22px; }
+.flow-media { display: block; width: 100%; height: 420px; border-radius: 16px; }
+.flow-media-empty { display: flex; align-items: center; justify-content: center; color: #8e683c; background: linear-gradient(135deg, #f3d9c6, #fff4e5); font-size: 80px; }
+.flow-caption { display: block; margin-top: 14px; padding: 18px; border-radius: 14px; color: #5e4844; background: #fff8f2; font-size: 25px; line-height: 1.7; }
+.flow-caption-actions { display: flex; gap: 14px; margin-top: 12px; }
+.result-actions { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+.result-publish { flex: 1; padding: 17px; border-radius: 14px; color: #fff; background: linear-gradient(135deg, #c9a46c, #ad8051); text-align: center; font-size: 25px; }
+.result-publish.disabled { opacity: 0.55; }
+.ws-stage { display: flex; align-items: center; gap: 10px; }
+.ws-stage-icon { animation: ai-breathe 1.6s ease-in-out infinite; }
 
 @media (min-width: 700px) {
   .page { max-width: 760px; margin: 0 auto; }
